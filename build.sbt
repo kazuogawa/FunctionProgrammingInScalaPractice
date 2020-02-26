@@ -1,4 +1,4 @@
-name := "AdserverPractice"
+name := "FunctionProgrammingInScalaPractice"
 
 version := "1.0"
 
