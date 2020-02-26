@@ -693,15 +693,15 @@ object Practice {
         //強制されるまで実際には発生しない
         def fork[A](p: => A):Par[A] = ???
 
-        def sumViaIndexSeq(l:IndexedSeq[Int]):Par[Int] =
-          if(l.length <= 1) Par.unit(l.headOption.getOrElse(0))
-          else {
-            val (leftIndexSeq, rightIndexSeq) = l.splitAt(l.length / 2)
-              Par.map2(
-                Par.fork(sumViaIndexSeq(leftIndexSeq)),
-                Par.fork(sumViaIndexSeq(rightIndexSeq))
-              )(_ + _)
-          }
+        //def sumViaIndexSeq(l:IndexedSeq[Int]):Par[Int] =
+        //  if(l.length <= 1) Par.unit(l.headOption.getOrElse(0))
+        //  else {
+        //    val (leftIndexSeq, rightIndexSeq) = l.splitAt(l.length / 2)
+        //      Par.map2(
+        //        Par.fork(sumViaIndexSeq(leftIndexSeq)),
+        //        Par.fork(sumViaIndexSeq(rightIndexSeq))
+        //      )(_ + _)
+        //  }
 
         //評価されて引数をParでラッピングして、並列評価の対象としてマークする
         def lazyUnit[A](a: => A):Par[A] = fork(a)
