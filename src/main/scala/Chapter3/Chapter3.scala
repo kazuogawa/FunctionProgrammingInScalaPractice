@@ -64,6 +64,21 @@ object Chapter3 extends App {
       case Cons(h, t) if f(h) => dropWhile(t, f)
       case _ => l
     }
+
+    //exercise 3.6
+    def init[A](l: List[A]): List[A] = l match {
+      case Nil => Nil //Nilでいいのか？
+      case Cons(_, Nil) => Nil
+      case Cons(h, t) => Cons(h, init(t))
+    }
+
+    //dropWhileのcurry化
+    @scala.annotation.tailrec
+    def dropWhile[A](as: List[A])(f: A => Boolean): List[A] =
+      as match {
+        case Cons(h, t) if f(h) => dropWhile(t)(f)
+        case _ => as
+      }
   }
 
   val ex1: List[Double] = Nil
@@ -105,5 +120,14 @@ object Chapter3 extends App {
   println(List.dropWhile(Nil, conditions))
   println(List.dropWhile(List(1, 2, 3, 4, 5), conditions))
   println(List.dropWhile(List(1, 2), conditions))
+
+  println("exercise 3.6")
+  println(List.init(Nil))
+  println(List.init(List(1)))
+  println(List.init(List(1, 2, 3, 4, 5)))
+
+  val xs: List[Int] = List(1, 2, 3, 4, 5)
+  val tochu = List.dropWhile(xs)
+  val dropWhileCurryResult: List[Int] = tochu(x => x < 4)
 
 }
