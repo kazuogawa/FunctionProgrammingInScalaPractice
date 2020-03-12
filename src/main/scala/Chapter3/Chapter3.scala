@@ -19,7 +19,7 @@ object Chapter3 extends App {
 
     def product(ds: List[Double]): Double = ds match {
       case Nil => 1.0
-      case Cons(0.0, _) => 0.0
+      //case Cons(0.0, _) => 0.0
       case Cons(x, xs) => x * product(xs)
     }
 
@@ -59,9 +59,9 @@ object Chapter3 extends App {
 
     //exercise 3.5
     //日本語が難しい
-    @scala.annotation.tailrec
-    def dropWhile[A](l: List[A], f: A => Boolean): List[A] = l match {
-      case Cons(h, t) if f(h) => dropWhile(t, f)
+    //@scala.annotation.tailrec
+    def dropWhile2[A](l: List[A], f: A => Boolean): List[A] = l match {
+      case Cons(h, t) if f(h) => dropWhile2(t, f)
       case _ => l
     }
 
@@ -74,11 +74,55 @@ object Chapter3 extends App {
 
     //dropWhileのcurry化
     @scala.annotation.tailrec
-    def dropWhile[A](as: List[A])(f: A => Boolean): List[A] =
+    def dropWhile3[A](as: List[A])(f: A => Boolean): List[A] =
       as match {
-        case Cons(h, t) if f(h) => dropWhile(t)(f)
+        case Cons(h, t) if f(h) => dropWhile3(t)(f)
         case _ => as
       }
+
+    def foldRight[A, B](as: List[A], z: B)(f: (A, B) => B): B =
+      as match {
+        case Nil => z
+        case Cons(x, xs) => f(x, foldRight(xs, z)(f))
+      }
+
+    def sum2(ns: List[Int]): Int = foldRight(ns, 0)((x, y) => x + y)
+
+    def product2(ns: List[Double]): Double = foldRight(ns, 1.0)(_ * _)
+
+    //exercise 3.9
+    def length[A](as: List[A]): Int = foldRight(as, 0)((_, counter) => counter + 1)
+
+    //exercise 3.10
+    //簡単である・・・
+    @scala.annotation.tailrec
+    def foldLeft[A, B](as: List[A], z: B)(f: (B, A) => B): B = as match {
+      case Nil => z
+      case Cons(h, t) => foldLeft(t, f(z, h))(f)
+    }
+
+    //exercise 3.11
+    def sumL(l: List[Int]): Int = foldLeft(l, 0)(_ + _)
+
+    def productL(ns: List[Double]): Double = foldLeft(ns, 1.0)(_ * _)
+
+    def lengthL[A](as: List[A]): Int = foldLeft(as, 0)((counter, _) => counter + 1)
+
+    //exercise 3.12
+    def reverse[A](as: List[A]): List[A] = foldLeft(as, Nil: List[A])((as, h) => Cons(h, as))
+
+    //exercise 3.13
+    //これでいいのかわからない.
+    def foldLeftR[A, B](as: List[A], z: B)(f: (B, A) => B): B = foldRight(as, z)((a, b) => f(b, a))
+
+    def foldRightL[A, B](as: List[A], z: B)(f: (A, B) => B): B = foldLeft(as, z)((b, a) => f(a, b))
+
+    //exercise 3.14
+    //なんでl1,l2はこの順なんだろう
+    def append[A](l1: List[A], l2: List[A]): List[A] = foldRight(l1, l2)((hl, tl) => Cons(hl, tl))
+
+    //exercise 3.15
+    def concat[A](l: List[List[A]]): List[A] = foldLeft(l, Nil: List[A])(append)
   }
 
   val ex1: List[Double] = Nil
@@ -117,9 +161,9 @@ object Chapter3 extends App {
 
   println("exercise 3.5")
   val conditions: Int => Boolean = (n: Int) => n < 3
-  println(List.dropWhile(Nil, conditions))
-  println(List.dropWhile(List(1, 2, 3, 4, 5), conditions))
-  println(List.dropWhile(List(1, 2), conditions))
+  println(List.dropWhile2(Nil, conditions))
+  println(List.dropWhile2(List(1, 2, 3, 4, 5), conditions))
+  println(List.dropWhile2(List(1, 2), conditions))
 
   println("exercise 3.6")
   println(List.init(Nil))
@@ -127,7 +171,32 @@ object Chapter3 extends App {
   println(List.init(List(1, 2, 3, 4, 5)))
 
   val xs: List[Int] = List(1, 2, 3, 4, 5)
-  val tochu = List.dropWhile(xs)
-  val dropWhileCurryResult: List[Int] = tochu(x => x < 4)
+  val dropWhileCurryResult: List[Int] = List.dropWhile3(xs)(x => x < 4)
 
+  println(List.foldRight(List(1, 2, 3), Nil: List[Int])(Cons(_, _)))
+
+  println("exercise 3.9")
+  println(List.length(Nil))
+  println(List.length(List(1)))
+  println(List.length(List(1, 2, 3, 4, 5)))
+
+  println("exercise 3.10")
+
+  println("exercise 3.11")
+  println(List.sumL(List(1, 2, 3)))
+  println(List.productL(List(2.0, 5.0, 3.0)))
+  println(List.lengthL(List("aaa", "b", "ccc")))
+
+  println("exercise 3.12")
+  println(List.reverse(List("aaa", "b", "ccc")))
+
+  println("exercise 3.13")
+  println(List.foldLeftR(List(1, 2, 3), 0)(_ + _))
+  println(List.foldRightL(List(1, 2, 3), 0)(_ + _))
+
+  println("exercise 3.14")
+  println(List.append(List(1, 2, 3), List(4, 5, 6)))
+
+  println("exercise 3.15")
+  println(List.concat(List(List(1, 2, 3), List(4, 5, 6))))
 }
