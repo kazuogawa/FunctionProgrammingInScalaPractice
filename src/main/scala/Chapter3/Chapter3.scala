@@ -112,7 +112,7 @@ object Chapter3 extends App {
     def reverse[A](as: List[A]): List[A] = foldLeft(as, Nil: List[A])((as, h) => Cons(h, as))
 
     //exercise 3.13
-    //これでいいのかわからない.
+    //これでいいのかわからない.記述は可能なのでは？
     def foldLeftR[A, B](as: List[A], z: B)(f: (B, A) => B): B = foldRight(as, z)((a, b) => f(b, a))
 
     def foldRightL[A, B](as: List[A], z: B)(f: (A, B) => B): B = foldLeft(as, z)((b, a) => f(a, b))
@@ -123,80 +123,129 @@ object Chapter3 extends App {
 
     //exercise 3.15
     def concat[A](l: List[List[A]]): List[A] = foldLeft(l, Nil: List[A])(append)
+
+    //exercise 3.16
+    //こたえみた！mapってないのかー。なんでfoldLeftだとできないのだろう・・・
+    def allPlus1(l: List[Int]): List[Int] = foldRight(l, Nil: List[Int])((h, t) => Cons(h + 1, t))
+
+    //exercise 3.17
+    def doubleToString(l: List[Double]): List[String] = foldRight(l, Nil: List[String])((h, t) => Cons(h.toString, t))
+
+    //exercise 3.18
+    def map[A, B](as: List[A])(f: A => B): List[B] = foldRight(as, Nil: List[B])((h, t) => Cons(f(h), t))
+
+    //exercise 3.19
+    def filter[A](as: List[A])(f: A => Boolean): List[A] =
+      foldRight(as, Nil: List[A])((h, t) => if (f(h)) Cons(h, t) else t)
+
+    //exercise 3.20
+    //おもいつかなかった。こたえみた。すげえ
+    def flatMap[A, B](as: List[A])(f: A => List[B]): List[B] =
+      concat(map(as)(f))
+
+    //exercise 3.21
+    //こたえみた
+    def flatMapFilter[A](as: List[A])(f: A => Boolean): List[A] = flatMap(as)(a => if (f(a)) List(a) else Nil)
+
+    //exercise 3.22
+    def ListValuePlus(l1: List[Int], l2: List[Int]): List[Int] = (l1, l2) match {
+      case (Nil, _) => Nil
+      case (_, Nil) => Nil
+      case (Cons(l1h, l1t), Cons(l2h, l2t)) => Cons(l1h + l2h, ListValuePlus(l1t, l2t))
+    }
+
+    //exercise 3.23
+    //こたえみた。どっからfでてきたの・・・？
+    def zipWith[A,B,C](a: List[A], b: List[B])(f: (A,B) => C): List[C] = (a,b) match {
+      case (Nil, _) => Nil
+      case (_, Nil) => Nil
+      case (Cons(h1,t1), Cons(h2,t2)) => Cons(f(h1,h2), zipWith(t1,t2)(f))
+    }
+
+    val ex1: List[Double] = Nil
+    val ex2: List[Int] = Cons(1, Nil)
+    val ex3: List[String] = Cons("a", Cons("b", Nil))
+
+    sealed trait Animal
+
+    case object Dog extends Animal
+
+    case object Cat extends Animal
+
+    val animalList: List[Animal] = Cons(Dog, Cons(Cat, Nil))
+
+    println("exercise 3.1")
+    println(List.x)
+
+    println("exercise 3.2")
+    println(List.tail(ex1))
+    println(List.tail(ex2))
+    println(List.tail(ex3))
+
+    println("exercise 3.3")
+    println(List.setHead(1.2, ex1))
+    println(List.setHead(200, ex2))
+    println(List.setHead("zzz", ex3))
+
+    println("exercise 3.4")
+    println(List.drop(ex1, 1))
+    println(List.drop(ex2, 1))
+    println(List.drop(ex3, 1))
+    val testList = List(1, 2, 3, 4, 5)
+    println(List.drop(testList, 4))
+    println(List.drop(testList, -4))
+    println(List.drop(testList, 0))
+
+    println("exercise 3.5")
+    val conditions: Int => Boolean = (n: Int) => n < 3
+    println(List.dropWhile2(Nil, conditions))
+    println(List.dropWhile2(List(1, 2, 3, 4, 5), conditions))
+    println(List.dropWhile2(List(1, 2), conditions))
+
+    println("exercise 3.6")
+    println(List.init(Nil))
+    println(List.init(List(1)))
+    println(List.init(List(1, 2, 3, 4, 5)))
+
+    val xs: List[Int] = List(1, 2, 3, 4, 5)
+    val dropWhileCurryResult: List[Int] = List.dropWhile3(xs)(x => x < 4)
+
+    println(List.foldRight(List(1, 2, 3), Nil: List[Int])(Cons(_, _)))
+
+    println("exercise 3.9")
+    println(List.length(Nil))
+    println(List.length(List(1)))
+    println(List.length(List(1, 2, 3, 4, 5)))
+
+    println("exercise 3.10")
+
+    println("exercise 3.11")
+    println(List.sumL(List(1, 2, 3)))
+    println(List.productL(List(2.0, 5.0, 3.0)))
+    println(List.lengthL(List("aaa", "b", "ccc")))
+
+    println("exercise 3.12")
+    println(List.reverse(List("aaa", "b", "ccc")))
+
+    println("exercise 3.13")
+    println(List.foldLeftR(List(1, 2, 3), 0)(_ + _))
+    println(List.foldRightL(List(1, 2, 3), 0)(_ + _))
+
+    println("exercise 3.14")
+    println(List.append(List(1, 2, 3), List(4, 5, 6)))
+
+    println("exercise 3.15")
+    println(List.concat(List(List(1, 2, 3), List(4, 5, 6))))
+
+    println("exercise 3.16")
+    println(List.allPlus1(List(1, 2, 3)))
+
+    println("exercise 3.17")
+    println(List.doubleToString(List(1.0, 2.0, 3.0)))
+
+    println("exercise 3.18")
+    println(List.map(List(1.0, 2.0, 3.0))(_ + 0.1))
+
+    println("exercise 3.19")
+    println(List.filter(List(1.0, 2.0, 3.0))(_ < 2.5))
   }
-
-  val ex1: List[Double] = Nil
-  val ex2: List[Int] = Cons(1, Nil)
-  val ex3: List[String] = Cons("a", Cons("b", Nil))
-
-  sealed trait Animal
-
-  case object Dog extends Animal
-
-  case object Cat extends Animal
-
-  val animalList: List[Animal] = Cons(Dog, Cons(Cat, Nil))
-
-  println("exercise 3.1")
-  println(List.x)
-
-  println("exercise 3.2")
-  println(List.tail(ex1))
-  println(List.tail(ex2))
-  println(List.tail(ex3))
-
-  println("exercise 3.3")
-  println(List.setHead(1.2, ex1))
-  println(List.setHead(200, ex2))
-  println(List.setHead("zzz", ex3))
-
-  println("exercise 3.4")
-  println(List.drop(ex1, 1))
-  println(List.drop(ex2, 1))
-  println(List.drop(ex3, 1))
-  val testList = List(1, 2, 3, 4, 5)
-  println(List.drop(testList, 4))
-  println(List.drop(testList, -4))
-  println(List.drop(testList, 0))
-
-  println("exercise 3.5")
-  val conditions: Int => Boolean = (n: Int) => n < 3
-  println(List.dropWhile2(Nil, conditions))
-  println(List.dropWhile2(List(1, 2, 3, 4, 5), conditions))
-  println(List.dropWhile2(List(1, 2), conditions))
-
-  println("exercise 3.6")
-  println(List.init(Nil))
-  println(List.init(List(1)))
-  println(List.init(List(1, 2, 3, 4, 5)))
-
-  val xs: List[Int] = List(1, 2, 3, 4, 5)
-  val dropWhileCurryResult: List[Int] = List.dropWhile3(xs)(x => x < 4)
-
-  println(List.foldRight(List(1, 2, 3), Nil: List[Int])(Cons(_, _)))
-
-  println("exercise 3.9")
-  println(List.length(Nil))
-  println(List.length(List(1)))
-  println(List.length(List(1, 2, 3, 4, 5)))
-
-  println("exercise 3.10")
-
-  println("exercise 3.11")
-  println(List.sumL(List(1, 2, 3)))
-  println(List.productL(List(2.0, 5.0, 3.0)))
-  println(List.lengthL(List("aaa", "b", "ccc")))
-
-  println("exercise 3.12")
-  println(List.reverse(List("aaa", "b", "ccc")))
-
-  println("exercise 3.13")
-  println(List.foldLeftR(List(1, 2, 3), 0)(_ + _))
-  println(List.foldRightL(List(1, 2, 3), 0)(_ + _))
-
-  println("exercise 3.14")
-  println(List.append(List(1, 2, 3), List(4, 5, 6)))
-
-  println("exercise 3.15")
-  println(List.concat(List(List(1, 2, 3), List(4, 5, 6))))
-}
