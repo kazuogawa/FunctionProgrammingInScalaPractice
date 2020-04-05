@@ -156,96 +156,180 @@ object Chapter3 extends App {
 
     //exercise 3.23
     //こたえみた。どっからfでてきたの・・・？
-    def zipWith[A,B,C](a: List[A], b: List[B])(f: (A,B) => C): List[C] = (a,b) match {
+    def zipWith[A, B, C](a: List[A], b: List[B])(f: (A, B) => C): List[C] = (a, b) match {
       case (Nil, _) => Nil
       case (_, Nil) => Nil
-      case (Cons(h1,t1), Cons(h2,t2)) => Cons(f(h1,h2), zipWith(t1,t2)(f))
+      case (Cons(h1, t1), Cons(h2, t2)) => Cons(f(h1, h2), zipWith(t1, t2)(f))
     }
 
-    val ex1: List[Double] = Nil
-    val ex2: List[Int] = Cons(1, Nil)
-    val ex3: List[String] = Cons("a", Cons("b", Nil))
-
-    sealed trait Animal
-
-    case object Dog extends Animal
-
-    case object Cat extends Animal
-
-    val animalList: List[Animal] = Cons(Dog, Cons(Cat, Nil))
-
-    println("exercise 3.1")
-    println(List.x)
-
-    println("exercise 3.2")
-    println(List.tail(ex1))
-    println(List.tail(ex2))
-    println(List.tail(ex3))
-
-    println("exercise 3.3")
-    println(List.setHead(1.2, ex1))
-    println(List.setHead(200, ex2))
-    println(List.setHead("zzz", ex3))
-
-    println("exercise 3.4")
-    println(List.drop(ex1, 1))
-    println(List.drop(ex2, 1))
-    println(List.drop(ex3, 1))
-    val testList = List(1, 2, 3, 4, 5)
-    println(List.drop(testList, 4))
-    println(List.drop(testList, -4))
-    println(List.drop(testList, 0))
-
-    println("exercise 3.5")
-    val conditions: Int => Boolean = (n: Int) => n < 3
-    println(List.dropWhile2(Nil, conditions))
-    println(List.dropWhile2(List(1, 2, 3, 4, 5), conditions))
-    println(List.dropWhile2(List(1, 2), conditions))
-
-    println("exercise 3.6")
-    println(List.init(Nil))
-    println(List.init(List(1)))
-    println(List.init(List(1, 2, 3, 4, 5)))
-
-    val xs: List[Int] = List(1, 2, 3, 4, 5)
-    val dropWhileCurryResult: List[Int] = List.dropWhile3(xs)(x => x < 4)
-
-    println(List.foldRight(List(1, 2, 3), Nil: List[Int])(Cons(_, _)))
-
-    println("exercise 3.9")
-    println(List.length(Nil))
-    println(List.length(List(1)))
-    println(List.length(List(1, 2, 3, 4, 5)))
-
-    println("exercise 3.10")
-
-    println("exercise 3.11")
-    println(List.sumL(List(1, 2, 3)))
-    println(List.productL(List(2.0, 5.0, 3.0)))
-    println(List.lengthL(List("aaa", "b", "ccc")))
-
-    println("exercise 3.12")
-    println(List.reverse(List("aaa", "b", "ccc")))
-
-    println("exercise 3.13")
-    println(List.foldLeftR(List(1, 2, 3), 0)(_ + _))
-    println(List.foldRightL(List(1, 2, 3), 0)(_ + _))
-
-    println("exercise 3.14")
-    println(List.append(List(1, 2, 3), List(4, 5, 6)))
-
-    println("exercise 3.15")
-    println(List.concat(List(List(1, 2, 3), List(4, 5, 6))))
-
-    println("exercise 3.16")
-    println(List.allPlus1(List(1, 2, 3)))
-
-    println("exercise 3.17")
-    println(List.doubleToString(List(1.0, 2.0, 3.0)))
-
-    println("exercise 3.18")
-    println(List.map(List(1.0, 2.0, 3.0))(_ + 0.1))
-
-    println("exercise 3.19")
-    println(List.filter(List(1.0, 2.0, 3.0))(_ < 2.5))
   }
+
+  val ex1: List[Double] = Nil
+  val ex2: List[Int] = Cons(1, Nil)
+  val ex3: List[String] = Cons("a", Cons("b", Nil))
+
+  sealed trait Animal
+
+  case object Dog extends Animal
+
+  case object Cat extends Animal
+
+  val animalList: List[Animal] = Cons(Dog, Cons(Cat, Nil))
+
+  println("exercise 3.1")
+  println(List.x)
+
+  println("exercise 3.2")
+  println(List.tail(ex1))
+  println(List.tail(ex2))
+  println(List.tail(ex3))
+
+  println("exercise 3.3")
+  println(List.setHead(1.2, ex1))
+  println(List.setHead(200, ex2))
+  println(List.setHead("zzz", ex3))
+
+  println("exercise 3.4")
+  println(List.drop(ex1, 1))
+  println(List.drop(ex2, 1))
+  println(List.drop(ex3, 1))
+  val testList = List(1, 2, 3, 4, 5)
+  println(List.drop(testList, 4))
+  println(List.drop(testList, -4))
+  println(List.drop(testList, 0))
+
+  println("exercise 3.5")
+  val conditions: Int => Boolean = (n: Int) => n < 3
+  println(List.dropWhile2(Nil, conditions))
+  println(List.dropWhile2(List(1, 2, 3, 4, 5), conditions))
+  println(List.dropWhile2(List(1, 2), conditions))
+
+  println("exercise 3.6")
+  println(List.init(Nil))
+  println(List.init(List(1)))
+  println(List.init(List(1, 2, 3, 4, 5)))
+
+  val xs: List[Int] = List(1, 2, 3, 4, 5)
+  val dropWhileCurryResult: List[Int] = List.dropWhile3(xs)(x => x < 4)
+
+  println(List.foldRight(List(1, 2, 3), Nil: List[Int])(Cons(_, _)))
+
+  println("exercise 3.9")
+  println(List.length(Nil))
+  println(List.length(List(1)))
+  println(List.length(List(1, 2, 3, 4, 5)))
+
+  println("exercise 3.10")
+
+  println("exercise 3.11")
+  println(List.sumL(List(1, 2, 3)))
+  println(List.productL(List(2.0, 5.0, 3.0)))
+  println(List.lengthL(List("aaa", "b", "ccc")))
+
+  println("exercise 3.12")
+  println(List.reverse(List("aaa", "b", "ccc")))
+
+  println("exercise 3.13")
+  println(List.foldLeftR(List(1, 2, 3), 0)(_ + _))
+  println(List.foldRightL(List(1, 2, 3), 0)(_ + _))
+
+  println("exercise 3.14")
+  println(List.append(List(1, 2, 3), List(4, 5, 6)))
+
+  println("exercise 3.15")
+  println(List.concat(List(List(1, 2, 3), List(4, 5, 6))))
+
+  println("exercise 3.16")
+  println(List.allPlus1(List(1, 2, 3)))
+
+  println("exercise 3.17")
+  println(List.doubleToString(List(1.0, 2.0, 3.0)))
+
+  println("exercise 3.18")
+  println(List.map(List(1.0, 2.0, 3.0))(_ + 0.1))
+
+  println("exercise 3.19")
+  println(List.filter(List(1.0, 2.0, 3.0))(_ < 2.5))
+
+  //exercise 3.24
+  //思いつかないこんなの
+  @annotation.tailrec
+  def startsWith[A](l: List[A], prefix: List[A]): Boolean = (l,prefix) match {
+    //hasSubsequenceでNil見てるからかかなくていいのでは。とおもったが、↓の再帰処理でh2が空になった時にtrueを返すのに必要なのか
+    case (_,Nil) => true
+    //ここで一つずつ比較して同じかどうかを判断しているのか
+    case (Cons(h,t),Cons(h2,t2)) if h == h2 => startsWith(t, t2)
+    case _ => false
+  }
+  @annotation.tailrec
+  def hasSubsequence[A](sup: List[A], sub: List[A]): Boolean = sup match {
+    //Nilがsubに登録される可能性か・・・考えていなかった
+    case Nil => sub == Nil
+    case _ if startsWith(sup, sub) => true
+    case Cons(_,t) => hasSubsequence(t, sub)
+  }
+
+  println(hasSubsequence(List(1,2,3,4), List(2,3)))
+
+  sealed trait Tree[+A]
+  case class Leaf[A](value: A) extends Tree[A]
+  case class Branch[A](left: Tree[A], right: Tree[A]) extends Tree[A]
+
+  //exersize 3.25
+  def size[A](t: Tree[A]): Int = t match {
+    //下に移して_でもいいだろうけど、わかりやすくするために。。。
+    case Leaf(_) => 1
+    case Branch(l, r) => size(l) + size(r)
+  }
+
+  println(size(Branch(Branch(Leaf("str1"), Leaf("str2")), Leaf("str3"))))
+
+  //exersize 3.26
+  def maximum(t: Tree[Int]): Int = t match {
+    case Leaf(n) => n
+    case Branch(l, r) => maximum(l).max(maximum(r))
+  }
+
+  println(maximum(Branch(Branch(Leaf(100), Leaf(500)), Leaf(15))))
+
+  //exersize 3.27
+  //いみがわからなかったので、答えを見た。長さの数値を返せばいいってことね
+  def depth[A](t: Tree[A]): Int = t match {
+    case Leaf(_) => 0
+    case Branch(l, r) => 1 + depth(l).max(depth(r))
+  }
+
+  println(depth(Branch(Branch(Leaf("str1"), Leaf("str2")), Leaf("str3"))))
+
+  //exersize 3.28
+  def map[A, B](t: Tree[A], f: A => B): Tree[B] = t match {
+    case Leaf(l) => Leaf(f(l))
+    case Branch(l, r) => Branch(map(l, f), map(r,f))
+  }
+
+  println(map(Branch(Branch(Leaf(100), Leaf(500)), Leaf(15)), ((n: Int) => n + 100)))
+
+  //exersize 3.29
+  //fold
+  //わからん。答え見た
+  def fold[A,B](t: Tree[A])(f: A => B)(g: (B,B) => B): B = t match {
+    case Leaf(a) => f(a)
+    case Branch(l,r) => g(fold(l)(f)(g), fold(r)(f)(g))
+  }
+
+  //generalization
+  //わからん。こたえみた
+  def generalizationSize[A](t: Tree[A]): Int = fold(t)((a:A) => 1)(1 + _ + _)
+  def generalizationMaximum[A](t: Tree[A]): Int = fold(t)((a => a)(_ max _)
+  //こたえうごかないのだが・・・
+  //def generalizationDepth[A](t: Tree[A]): Int = fold(t)(a:A => 0)((d1,d2) => 1 + (d1 max d2))
+  def generalizationMap[A](t: Tree[A], f: A => B): Tree[B] = fold(t)((a => Leaf(f(a)))(Branch(_,_))
+
+  println(generalizationSize(Branch(Branch(Leaf("str1"), Leaf("str2")), Leaf("str3"))))
+  println(generalizationMaximum(Branch(Branch(Leaf(100), Leaf(500)), Leaf(15))))
+  //println(generalizationDepth(Branch(Branch(Leaf("str1"), Leaf("str2")), Leaf("str3"))))
+  println(generalizationMap(Branch(Branch(Leaf(100), Leaf(500)), Leaf(15)), ((n: Int) => n + 100)))
+
+  //fold関数とListの左畳み込みおよび右畳み込みの間にある類似性を抽出することは可能か？
+
+}
