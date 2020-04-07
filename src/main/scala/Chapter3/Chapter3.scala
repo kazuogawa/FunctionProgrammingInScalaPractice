@@ -254,32 +254,36 @@ object Chapter3 extends App {
   //exercise 3.24
   //思いつかないこんなの
   @annotation.tailrec
-  def startsWith[A](l: List[A], prefix: List[A]): Boolean = (l,prefix) match {
+  def startsWith[A](l: List[A], prefix: List[A]): Boolean = (l, prefix) match {
     //hasSubsequenceでNil見てるからかかなくていいのでは。とおもったが、↓の再帰処理でh2が空になった時にtrueを返すのに必要なのか
-    case (_,Nil) => true
+    case (_, Nil) => true
     //ここで一つずつ比較して同じかどうかを判断しているのか
-    case (Cons(h,t),Cons(h2,t2)) if h == h2 => startsWith(t, t2)
+    case (Cons(h, t), Cons(h2, t2)) if h == h2 => startsWith(t, t2)
     case _ => false
   }
+
   @annotation.tailrec
   def hasSubsequence[A](sup: List[A], sub: List[A]): Boolean = sup match {
     //Nilがsubに登録される可能性か・・・考えていなかった
     case Nil => sub == Nil
     case _ if startsWith(sup, sub) => true
-    case Cons(_,t) => hasSubsequence(t, sub)
+    case Cons(_, t) => hasSubsequence(t, sub)
   }
 
-  println(hasSubsequence(List(1,2,3,4), List(2,3)))
+  println(hasSubsequence(List(1, 2, 3, 4), List(2, 3)))
 
   sealed trait Tree[+A]
+
   case class Leaf[A](value: A) extends Tree[A]
+
   case class Branch[A](left: Tree[A], right: Tree[A]) extends Tree[A]
 
   //exersize 3.25
   def size[A](t: Tree[A]): Int = t match {
     //下に移して_でもいいだろうけど、わかりやすくするために。。。
     case Leaf(_) => 1
-    case Branch(l, r) => size(l) + size(r)
+    //ブランチも数えるため+1
+    case Branch(l, r) => 1 + size(l) + size(r)
   }
 
   println(size(Branch(Branch(Leaf("str1"), Leaf("str2")), Leaf("str3"))))
@@ -302,33 +306,34 @@ object Chapter3 extends App {
   println(depth(Branch(Branch(Leaf("str1"), Leaf("str2")), Leaf("str3"))))
 
   //exersize 3.28
-  def map[A, B](t: Tree[A], f: A => B): Tree[B] = t match {
+  //これだとfを呼び出すときに型をかかないといけない
+  //def map[A, B](t: Tree[A], f: A => B): Tree[B] = t match {
+  def map[A, B](t: Tree[A])(f: A => B): Tree[B] = t match {
     case Leaf(l) => Leaf(f(l))
-    case Branch(l, r) => Branch(map(l, f), map(r,f))
+    case Branch(l, r) => Branch(map(l)(f), map(r)(f))
   }
-
-  println(map(Branch(Branch(Leaf(100), Leaf(500)), Leaf(15)), ((n: Int) => n + 100)))
 
   //exersize 3.29
   //fold
   //わからん。答え見た
-  def fold[A,B](t: Tree[A])(f: A => B)(g: (B,B) => B): B = t match {
+  def fold[A, B](t: Tree[A])(f: A => B)(g: (B, B) => B): B = t match {
     case Leaf(a) => f(a)
-    case Branch(l,r) => g(fold(l)(f)(g), fold(r)(f)(g))
+    case Branch(l, r) => g(fold(l)(f)(g), fold(r)(f)(g))
   }
 
   //generalization
   //わからん。こたえみた
-  def generalizationSize[A](t: Tree[A]): Int = fold(t)((a:A) => 1)(1 + _ + _)
-  def generalizationMaximum[A](t: Tree[A]): Int = fold(t)((a => a)(_ max _)
-  //こたえうごかないのだが・・・
-  //def generalizationDepth[A](t: Tree[A]): Int = fold(t)(a:A => 0)((d1,d2) => 1 + (d1 max d2))
-  def generalizationMap[A](t: Tree[A], f: A => B): Tree[B] = fold(t)((a => Leaf(f(a)))(Branch(_,_))
+  def sizeViaFold[A](t: Tree[A]): Int =
+    fold(t)(a => 1)(1 + _ + _)
 
-  println(generalizationSize(Branch(Branch(Leaf("str1"), Leaf("str2")), Leaf("str3"))))
-  println(generalizationMaximum(Branch(Branch(Leaf(100), Leaf(500)), Leaf(15))))
-  //println(generalizationDepth(Branch(Branch(Leaf("str1"), Leaf("str2")), Leaf("str3"))))
-  println(generalizationMap(Branch(Branch(Leaf(100), Leaf(500)), Leaf(15)), ((n: Int) => n + 100)))
+  def maximumViaFold(t: Tree[Int]): Int =
+    fold(t)(a => a)(_ max _)
+
+  def depthViaFold[A](t: Tree[A]): Int =
+    fold(t)(a => 0)((d1, d2) => 1 + (d1 max d2))
+
+  println(sizeViaFold(Branch(Branch(Leaf("str1"), Leaf("str2")), Leaf("str3"))))
+  println(maximumViaFold(Branch(Branch(Leaf(100), Leaf(500)), Leaf(15))))
 
   //fold関数とListの左畳み込みおよび右畳み込みの間にある類似性を抽出することは可能か？
 
