@@ -76,7 +76,6 @@ object Chapter4 {
 
       //exercise 4.1終了
 
-
     }
 
     case class Employee(name: String, department: String)
@@ -121,6 +120,37 @@ object Chapter4 {
       a.flatMap(aa => b.map(bb => f(aa, bb)))
     //これでもOK?
     //a.flatMap(aa => b.flatMap(bb => Some(f(aa, bb))))
+
+
+    //exercise 4.4
+    //答え見た。foldLeft使ってどうにかしようとしたが、わからんかった
+    //foldRight,foldLeftの使い分けがいまいちわからないな。。。Listをいい感じに折りたたむときはfoldRightがいいってことか
+    def sequence[A](a: List[Option[A]]): Option[List[A]] =
+      a.foldRight[Option[List[A]]](Some(Nil))((x, y) => map2(x, y)(_ :: _))
+
+    //これができないのは、map2のf(aa, bb)だから、Optionの何か :: List(Some(Nil))になってしまうからか
+    //def sequence_2[A](a: List[Option[A]]): Option[List[A]] =
+    //  a.foldLeft[Option[List[A]]](Some(Nil))((x, y) => map2(x, y)(_ :: _))
+
+    //これならできる
+    def sequence_3[A](a: List[Option[A]]): Option[List[A]] =
+      a.foldLeft[Option[List[A]]](Some(Nil))((x, y) => map2(y, x)(_ :: _))
+
+    //どういう時にfoldLeftは使うのだろう・・・
+
+    //Option[Int]にした後に、Option[List[Int]]にするので、効率悪い
+    def parseInts(a: List[String]): Option[List[Int]] = sequence(a.map(i => Try(i.toInt)))
+
+    //exercise 4.5
+    //30minかかった
+    def traverse[A, B](a: List[A])(f: A => Option[B]): Option[List[B]] =
+      a.foldRight[Option[List[B]]](Some(Nil))((x, y) => map2(f(x), y)(_ :: _))
+
+    def map2ViaFor[A, B, C](a: Option[A], b: Option[B])(f: (A, B) => C): Option[C] =
+      for {
+        aa <- a
+        bb <- b
+      } yield f(aa, bb)
 
   }
 }
