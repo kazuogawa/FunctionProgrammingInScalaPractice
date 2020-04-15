@@ -152,5 +152,80 @@ object Chapter4 {
         bb <- b
       } yield f(aa, bb)
 
+    //sealed trait Either[+E, +A]
+    case class Left[+E](value: E) extends Either[E, Nothing]
+    case class Right[+A](value: A) extends Either[Nothing, A]
+
+    def meanEither(xs: IndexedSeq[Double]): Either[String, Double] =
+      if (xs.isEmpty) Left("mean of empty list")
+      else Right(xs.sum / xs.length)
+
+    def safeDiv(x: Int, y: Int): Either[Exception, Int] =
+      try Right(x / y)
+      catch {
+        case e: Exception => Left(e)
+      }
+
+    def eitherTry[A](a: => A): Either[Exception, A] =
+      try Right(a)
+      catch {
+        case e: Exception => Left(e)
+      }
+
+    //execise 4.6
+    trait Either[+E, +A] {
+      def map[B](f: A => B): Either[E, B] = this match {
+        case Left(e) => Left(e)
+        case Right(a) => Right(f(a))
+      }
+
+      //これは答え見た
+      def flatMap[EE >: E, B](f: A => Either[EE, B]): Either[EE, B] = this match {
+        case Left(e) => Left(e)
+        case Right(a) => f(a)
+      }
+
+      def orElse[EE >: E, B >: A](b: => Either[EE, B]): Either[EE, B] = this match {
+        case Left(_) => b
+        case _ => _
+      }
+
+      def map2[EE >: E, B, C](b: Either[EE, B])(f: (A, B) => C): Either[EE, C] =
+        this.flatMap(aa => b.map(bb => f(aa, bb)))
+    }
+
+    //def parseInsuranceRateQuote(age: String, numberOfSpeedingTickets: String): Either[Exception, Double] =
+    //  for {
+    //    a <- Try{ age.toInt}
+    //    tickets <- Try {numberOfSpeedingTickets.toInt}
+    //  } yield insuranceRateQuote(a, tickets)
+
+    //exercise 4.7
+    //こたえみた。さきにtraverseを実装かよ・・・。というかここら辺からめちゃくちゃわからん。
+    //map2とfoldRightの使い方をもっと理解する必要がありそう
+    def eitherTraverse[E, A, B](as: List[A])(f: A => Either[E, B]): Either[E, List[B]] =
+      as.foldRight[Either[E, List[B]]](Right(Nil))((x, y) => f(x).map2(y)(_ :: _))
+
+    def eitherSequence[E, A](es: List[Either[E, A]]): Either[E, List[A]] = eitherTraverse(es)(x => x)
+
+    case class Person(name: Name, age: Age)
+    sealed class Name(val value: String)
+    sealed class Age(val value: Int)
+    def mkName(name: String): Either[String, Name] =
+      if (name == "" || name == null) Left("Name is empty")
+      else Right(new Name(name))
+
+    def mkAge(age: Int): Either[String, Age] =
+      if (age < 0) Left("Age is out of range.")
+      else Right(new Age(age))
+
+    def mkPerson(name: String, age: Int): Either[String, Person] =
+      mkName(name).map2(mkAge(age))(Person)
+
+    //exercise4.8
+    //trait Partial[+A, +B]
+    //case class Errors[+A] extends Partial[A, Nothing]
+    //case class Success[+B] extends Partial[Nothing, B]
+    //orElse, traverse, sequenceの実装は分からない
   }
 }
