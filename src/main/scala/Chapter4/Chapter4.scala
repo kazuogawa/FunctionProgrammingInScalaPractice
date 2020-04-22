@@ -132,6 +132,9 @@ object Chapter4 {
     //def sequence_2[A](a: List[Option[A]]): Option[List[A]] =
     //  a.foldLeft[Option[List[A]]](Some(Nil))((x, y) => map2(x, y)(_ :: _))
 
+    def sugisawaSequence[A](a: List[Option[A]]): Option[List[A]] =
+      a.foldLeft(Some(List()): Option[List[A]])((acc, x) => x.flatMap(nx => acc.map(l => nx :: l)))
+
     //これならできる
     def sequence_3[A](a: List[Option[A]]): Option[List[A]] =
       a.foldLeft[Option[List[A]]](Some(Nil))((x, y) => map2(y, x)(_ :: _))
@@ -185,10 +188,10 @@ object Chapter4 {
         case Right(a) => f(a)
       }
 
-      def orElse[EE >: E, B >: A](b: => Either[EE, B]): Either[EE, B] = this match {
-        case Left(_) => b
-        case _ => _
-      }
+      //def orElse[EE >: E, B >: A](b: => Either[EE, B]): Either[EE, B] = this match {
+      //  case Left(_) => b
+      //  case Right(_) => _
+      //}
 
       def map2[EE >: E, B, C](b: Either[EE, B])(f: (A, B) => C): Either[EE, C] =
         this.flatMap(aa => b.map(bb => f(aa, bb)))
