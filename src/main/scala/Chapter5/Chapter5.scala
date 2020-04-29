@@ -62,11 +62,11 @@ object Chapter5 {
     println(y)
 
     trait Stream[+A] {
-      def headOption: Option[A] = this match {
-        case Stream.empty => None
-        //h()を使って強制的に評価
-        case Cons(h, _) => Some(h())
-      }
+      //def headOption: Option[A] = this match {
+      //  case Stream.empty => None
+      //  //h()を使って強制的に評価
+      //  case Cons(h, _) => Some(h())
+      //}
 
       //exercise 5.1
       //答え見た。絶対わからん
@@ -132,17 +132,19 @@ object Chapter5 {
         if (p(a)) Stream.cons(a, as) else Stream.empty[A])
 
       //exercise 5.6
-      def headOptionViaFoldRight: Option[A] =
+      //def headOptionViaFoldRight: Option[A] =
       //そっかEmptyだったらNone返すからifいらねえな
       //foldRight[Option[A]](None)((h, _) => if (h == Stream.empty) None else Some(h))
       //答えはこれ
+      def headOptionViaFoldRight: Option[A] =
         foldRight(None: Option[A])((h, _) => Some(h))
+
 
       //exercise 5.7
       def mapViaFoldRight[B](f: A => B): Stream[B] = foldRight[Stream[B]](Stream.empty)((a, as) => Stream.cons(f(a), as))
 
       def filterViaFoldRight(f: A => Boolean): Stream[A] =
-        foldRight(Stream.empty)((a, as) => if (f(a)) Stream.cons(a, as) else as)
+        foldRight[Stream[A]](Stream.empty)((a, as) => if (f(a)) Stream.cons(a, as) else as)
 
       //そもそも型が違った
       //def appendViaFoldRight(ap: => A): Stream[A] = foldRight(Stream.cons(ap, Stream.empty))((a, as) => Stream.cons(a, as))
