@@ -146,8 +146,8 @@ object Chapter5 {
 
       //そもそも型が違った
       //def appendViaFoldRight(ap: => A): Stream[A] = foldRight(Stream.cons(ap, Stream.empty))((a, as) => Stream.cons(a, as))
-      def appendViaFoldRight[B >: A](ap: => Stream[B]): Stream[A] =
-        foldRight(Stream.cons(ap, Stream.empty))((a, as) => Stream.cons(a, as))
+      def appendViaFoldRight[B >: A](ap: => Stream[B]): Stream[B] =
+        foldRight[Stream[B]](ap)((a, as) => Stream.cons(a, as))
 
       //答え見た。appendつかうのかー。頭になかった
       def flatMapViaFoldRight[B](f: A => Stream[B]): Stream[B] =
