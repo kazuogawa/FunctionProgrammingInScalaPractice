@@ -62,6 +62,12 @@ object Chapter5 {
     println(y)
 
     trait Stream[+A] {
+      def headOption: Option[A] = this match {
+        case Stream.empty => None
+        //h()を使って強制的に評価
+        case Cons(h, _) => Some(h())
+      }
+
       //exercise 5.1
       //答え見た。絶対わからん
       //なんでreverse前提で書かれているの？
@@ -102,23 +108,50 @@ object Chapter5 {
       }
 
       def exists(p: A => Boolean): Boolean = this match {
-          // ||が非正格。p(h())がtrueを返したら走査はそこで終了する
+        // ||が非正格。p(h())がtrueを返したら走査はそこで終了する
         case Cons(h, t) => p(h()) || t().exists(p)
         case _ => false
       }
 
       def foldRight[B](z: => B)(f: (A, => B) => B): B = this match {
-          //fが第二パラメータに関して非正格なため、パラメータ評価をしないことを選択した場合走査はそこで終了
+        //fが第二パラメータに関して非正格なため、パラメータ評価をしないことを選択した場合走査はそこで終了
         case Cons(h, t) => f(h(), t().foldRight(z)(f))
         case _ => z
       }
 
       def existsViaFoldRight(p: A => Boolean): Boolean =
-        //ここのthisはつけてもつけなくてもいいのか。
+      //ここのthisはつけてもつけなくてもいいのか。
         this.foldRight(false)((a, b) => p(a) || b)
 
       //exercise 5.4
       def forAll(p: A => Boolean): Boolean = this.foldRight(true)((a, b) => p(a) && b)
+
+      //exercise 5.5
+      //答え見た。foldRight内でifつかっていいのか。
+      def takeWhileViaFoldRight(p: A => Boolean): Stream[A] = foldRight(Stream.empty[A])((a, as) =>
+        if (p(a)) Stream.cons(a, as) else Stream.empty[A])
+
+      //exercise 5.6
+      def headOptionViaFoldRight: Option[A] =
+      //そっかEmptyだったらNone返すからifいらねえな
+      //foldRight[Option[A]](None)((h, _) => if (h == Stream.empty) None else Some(h))
+      //答えはこれ
+        foldRight(None: Option[A])((h, _) => Some(h))
+
+      //exercise 5.7
+      def mapViaFoldRight[B](f: A => B): Stream[B] = foldRight[Stream[B]](Stream.empty)((a, as) => Stream.cons(f(a), as))
+
+      def filterViaFoldRight(f: A => Boolean): Stream[A] =
+        foldRight(Stream.empty)((a, as) => if (f(a)) Stream.cons(a, as) else as)
+
+      //そもそも型が違った
+      //def appendViaFoldRight(ap: => A): Stream[A] = foldRight(Stream.cons(ap, Stream.empty))((a, as) => Stream.cons(a, as))
+      def appendViaFoldRight[B >: A](ap: => Stream[B]): Stream[A] =
+        foldRight(Stream.cons(ap, Stream.empty))((a, as) => Stream.cons(a, as))
+
+      //答え見た。appendつかうのかー。頭になかった
+      def flatMapViaFoldRight[B](f: A => Stream[B]): Stream[B] =
+        foldRight[Stream[B]](Stream.empty)((a, as) => f(a).appendViaFoldRight(as))
     }
     case object Empty extends Stream[Nothing]
     //空でないheadとtailはどちらも非正格。thunk
@@ -140,11 +173,6 @@ object Chapter5 {
         if (as.isEmpty) empty
         else cons(as.head, apply(as.tail: _*))
     }
-    //def headOption: Option[A] = this match {
-    //  case Empty => None
-    //h()を使って強制的に評価
-    //  case Cons(h, t) => Some(h()) 1
-    //}
 
 
   }
