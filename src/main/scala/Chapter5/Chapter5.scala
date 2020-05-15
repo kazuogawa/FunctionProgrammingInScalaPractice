@@ -154,6 +154,17 @@ object Chapter5 {
       //答え見た。appendつかうのかー。頭になかった
       def flatMapViaFoldRight[B](f: A => Stream[B]): Stream[B] =
         foldRight[Stream[B]](Stream.empty)((a, as) => f(a).appendViaFoldRight(as))
+
+      //見つけたら即終了なので便利。
+      def find(p: A => Boolean): Option[A] = filterViaFoldRight(p).headOptionViaFoldRight
+
+      //exercise 5.8
+      def constant[A](a: A): Stream[A] = Stream.cons(a, constant(a))
+
+      //exercise 5.9
+      def from(n: Int): Stream[Int] = Stream.cons(n, from(n + 1))
+
+
     }
     case object Empty extends Stream[Nothing]
     //空でないheadとtailはどちらも非正格。thunk
@@ -170,12 +181,18 @@ object Chapter5 {
       //これもスマートコンストラクタらしい
       def empty[A]: Stream[A] = Empty
 
-      //ふくすの要素からStreamを作成するための、可変長の引数を持つメソッド
+      //ふくすうの要素からStreamを作成するための、可変長の引数を持つメソッド
       def apply[A](as: A*): Stream[A] =
         if (as.isEmpty) empty
         else cons(as.head, apply(as.tail: _*))
+
+      //無限ストリーム
+      val ones: Stream[Int] = Stream.cons(1, ones)
+
     }
-
-
+    //println(Stream.ones.take(5).toList)
+    //println(Stream.ones.exists(_ % 2 != 0))
+    //下記はスタックオーバーフローになる
+    //println(ones.forAll(_ == 1))
   }
 }
