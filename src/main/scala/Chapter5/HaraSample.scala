@@ -41,8 +41,6 @@ object HaraSample {
 
   object StreamSample {
     val ones: Stream[Int] = Stream.cons(1, ones)
-
-
   }
 
   def main(args: Array[String]): Unit = {

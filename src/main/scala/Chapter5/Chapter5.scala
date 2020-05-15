@@ -1,6 +1,151 @@
 package Chapter5
 
 object Chapter5 {
+  trait Stream[+A] {
+    //def headOption: Option[A] = this match {
+    //  case Stream.empty => None
+    //  //h()を使って強制的に評価
+    //  case Cons(h, _) => Some(h())
+    //}
+
+    //exercise 5.1
+    //答え見た。絶対わからん
+    //なんでreverse前提で書かれているの？
+    def toList: List[A] = {
+      @annotation.tailrec
+      def go(s: Stream[A], acc: List[A]): List[A] = s match {
+        case Cons(h, t) => go(t(), h() :: acc)
+        case _ => acc
+      }
+
+      go(this, List()).reverse
+    }
+
+    //exercise 5.2
+    //答え見た。matchでなんとかするのはわかった。
+    def take(n: Int): Stream[A] = this match {
+      case Cons(h, t) if n > 1 => Stream.cons(h(), t().take(n - 1))
+      case Cons(h, _) if n == 1 => Stream.cons(h(), Stream.empty)
+      case _ => Stream.empty
+    }
+
+    def drop(n: Int): Stream[A] = this match {
+      case Cons(_, t) if n > 1 => t().drop(n - 1)
+      case Cons(_, t) if n == 1 => t()
+      case _ => Stream.empty
+    }
+
+    //解答は下記。確かに↑のやつより単純。
+    def dropAnswer(n: Int): Stream[A] = this match {
+      case Cons(_, t) if n > 1 => t().drop(n - 1)
+      case _ => this
+    }
+
+    //exercise 5.3
+    def takeWhile(p: A => Boolean): Stream[A] = this match {
+      case Cons(h, t) if p(h()) => Stream.cons(h(), t().takeWhile(p))
+      case _ => Stream.empty
+    }
+
+    def exists(p: A => Boolean): Boolean = this match {
+      // ||が非正格。p(h())がtrueを返したら走査はそこで終了する
+      case Cons(h, t) => p(h()) || t().exists(p)
+      case _ => false
+    }
+
+    def foldRight[B](z: => B)(f: (A, => B) => B): B = this match {
+      //fが第二パラメータに関して非正格なため、パラメータ評価をしないことを選択した場合走査はそこで終了
+      case Cons(h, t) => f(h(), t().foldRight(z)(f))
+      case _ => z
+    }
+
+    def existsViaFoldRight(p: A => Boolean): Boolean =
+    //ここのthisはつけてもつけなくてもいいのか。
+      this.foldRight(false)((a, b) => p(a) || b)
+
+    //exercise 5.4
+    def forAll(p: A => Boolean): Boolean = this.foldRight(true)((a, b) => p(a) && b)
+
+    //exercise 5.5
+    //答え見た。foldRight内でifつかっていいのか。
+    def takeWhileViaFoldRight(p: A => Boolean): Stream[A] = foldRight(Stream.empty[A])((a, as) =>
+      if (p(a)) Stream.cons(a, as) else Stream.empty[A])
+
+    //exercise 5.6
+    //def headOptionViaFoldRight: Option[A] =
+    //そっかEmptyだったらNone返すからifいらねえな
+    //foldRight[Option[A]](None)((h, _) => if (h == Stream.empty) None else Some(h))
+    //答えはこれ
+    def headOptionViaFoldRight: Option[A] =
+      foldRight(None: Option[A])((h, _) => Some(h))
+
+
+    //exercise 5.7
+    def mapViaFoldRight[B](f: A => B): Stream[B] = foldRight[Stream[B]](Stream.empty)((a, as) => Stream.cons(f(a), as))
+
+    def filterViaFoldRight(f: A => Boolean): Stream[A] =
+      foldRight[Stream[A]](Stream.empty)((a, as) => if (f(a)) Stream.cons(a, as) else as)
+
+    //そもそも型が違った
+    //def appendViaFoldRight(ap: => A): Stream[A] = foldRight(Stream.cons(ap, Stream.empty))((a, as) => Stream.cons(a, as))
+    def appendViaFoldRight[B >: A](ap: => Stream[B]): Stream[B] =
+      foldRight[Stream[B]](ap)((a, as) => Stream.cons(a, as))
+
+    //答え見た。appendつかうのかー。頭になかった
+    def flatMapViaFoldRight[B](f: A => Stream[B]): Stream[B] =
+      foldRight[Stream[B]](Stream.empty)((a, as) => f(a).appendViaFoldRight(as))
+
+    //見つけたら即終了なので便利。
+    def find(p: A => Boolean): Option[A] = filterViaFoldRight(p).headOptionViaFoldRight
+
+    //exercise 5.8
+    def constant[A](a: A): Stream[A] = Stream.cons(a, constant(a))
+
+    //exercise 5.9
+    def from(n: Int): Stream[Int] = Stream.cons(n, from(n + 1))
+
+    //exercise 5.11
+    //余再帰。再帰関数はデータを消費するのに対し、余再帰はデータを生成する.
+    //unfoldでfを実行するだけでStreamの次の要素を生成する
+    //def unfold[A, S](z: S)(f: S => Option[(A, S)]): Stream[A] = Stream.cons(z, unfold(f(z), f))
+    //答え下記...Noneのことを考えていなかった
+    def unfold[A, S](z: S)(f: S => Option[(A, S)]): Stream[A] =
+      f(z) match {
+        case Some((h,s)) => Stream.cons(h, unfold(s)(f))
+        case None => Stream.empty
+      }
+  }
+  case object Empty extends Stream[Nothing]
+  //空でないheadとtailはどちらも非正格。thunk
+  case class Cons[+A](h: () => A, t: () => Stream[A]) extends Stream[A]
+  object Stream {
+    //スマートコンストラクタ
+    def cons[A](hd: => A, tl: => Stream[A]): Stream[A] = {
+      //評価の繰り返しを避けるためにheadとtailの評価の遅延値をキャッシュ
+      lazy val head = hd
+      lazy val tail = tl
+      Cons(() => head, () => tail)
+    }
+
+    //これもスマートコンストラクタらしい
+    def empty[A]: Stream[A] = Empty
+
+    //ふくすうの要素からStreamを作成するための、可変長の引数を持つメソッド
+    def apply[A](as: A*): Stream[A] =
+      if (as.isEmpty) empty
+      else cons(as.head, apply(as.tail: _*))
+
+    //無限ストリーム
+    val ones: Stream[Int] = Stream.cons(1, ones)
+
+    //exercise 5.10
+    //答え見た。valで作成していいのか
+    val fibs: Stream[Int] = {
+      def go(f0: Int, f1: Int): Stream[Int] = cons(f0, go(f1, f0 + 1))
+
+      go(0, 1)
+    }
+  }
   def main(args: Array[String]): Unit = {
     (1 to 4).map(_ + 10).filter(_ % 2 == 0).map(_ * 3)
 
@@ -61,137 +206,17 @@ object Chapter5 {
 
     println(y)
 
-    trait Stream[+A] {
-      //def headOption: Option[A] = this match {
-      //  case Stream.empty => None
-      //  //h()を使って強制的に評価
-      //  case Cons(h, _) => Some(h())
-      //}
 
-      //exercise 5.1
-      //答え見た。絶対わからん
-      //なんでreverse前提で書かれているの？
-      def toList: List[A] = {
-        @annotation.tailrec
-        def go(s: Stream[A], acc: List[A]): List[A] = s match {
-          case Cons(h, t) => go(t(), h() :: acc)
-          case _ => acc
-        }
+    //object StreamSample{
+    //  val ones: Stream[Int] = Stream.cons(1, ones)
 
-        go(this, List()).reverse
-      }
-
-      //exercise 5.2
-      //答え見た。matchでなんとかするのはわかった。
-      def take(n: Int): Stream[A] = this match {
-        case Cons(h, t) if n > 1 => Stream.cons(h(), t().take(n - 1))
-        case Cons(h, _) if n == 1 => Stream.cons(h(), Stream.empty)
-        case _ => Stream.empty
-      }
-
-      def drop(n: Int): Stream[A] = this match {
-        case Cons(_, t) if n > 1 => t().drop(n - 1)
-        case Cons(_, t) if n == 1 => t()
-        case _ => Stream.empty
-      }
-
-      //解答は下記。確かに↑のやつより単純。
-      def dropAnswer(n: Int): Stream[A] = this match {
-        case Cons(_, t) if n > 1 => t().drop(n - 1)
-        case _ => this
-      }
-
-      //exercise 5.3
-      def takeWhile(p: A => Boolean): Stream[A] = this match {
-        case Cons(h, t) if p(h()) => Stream.cons(h(), t().takeWhile(p))
-        case _ => Stream.empty
-      }
-
-      def exists(p: A => Boolean): Boolean = this match {
-        // ||が非正格。p(h())がtrueを返したら走査はそこで終了する
-        case Cons(h, t) => p(h()) || t().exists(p)
-        case _ => false
-      }
-
-      def foldRight[B](z: => B)(f: (A, => B) => B): B = this match {
-        //fが第二パラメータに関して非正格なため、パラメータ評価をしないことを選択した場合走査はそこで終了
-        case Cons(h, t) => f(h(), t().foldRight(z)(f))
-        case _ => z
-      }
-
-      def existsViaFoldRight(p: A => Boolean): Boolean =
-      //ここのthisはつけてもつけなくてもいいのか。
-        this.foldRight(false)((a, b) => p(a) || b)
-
-      //exercise 5.4
-      def forAll(p: A => Boolean): Boolean = this.foldRight(true)((a, b) => p(a) && b)
-
-      //exercise 5.5
-      //答え見た。foldRight内でifつかっていいのか。
-      def takeWhileViaFoldRight(p: A => Boolean): Stream[A] = foldRight(Stream.empty[A])((a, as) =>
-        if (p(a)) Stream.cons(a, as) else Stream.empty[A])
-
-      //exercise 5.6
-      //def headOptionViaFoldRight: Option[A] =
-      //そっかEmptyだったらNone返すからifいらねえな
-      //foldRight[Option[A]](None)((h, _) => if (h == Stream.empty) None else Some(h))
-      //答えはこれ
-      def headOptionViaFoldRight: Option[A] =
-        foldRight(None: Option[A])((h, _) => Some(h))
-
-
-      //exercise 5.7
-      def mapViaFoldRight[B](f: A => B): Stream[B] = foldRight[Stream[B]](Stream.empty)((a, as) => Stream.cons(f(a), as))
-
-      def filterViaFoldRight(f: A => Boolean): Stream[A] =
-        foldRight[Stream[A]](Stream.empty)((a, as) => if (f(a)) Stream.cons(a, as) else as)
-
-      //そもそも型が違った
-      //def appendViaFoldRight(ap: => A): Stream[A] = foldRight(Stream.cons(ap, Stream.empty))((a, as) => Stream.cons(a, as))
-      def appendViaFoldRight[B >: A](ap: => Stream[B]): Stream[B] =
-        foldRight[Stream[B]](ap)((a, as) => Stream.cons(a, as))
-
-      //答え見た。appendつかうのかー。頭になかった
-      def flatMapViaFoldRight[B](f: A => Stream[B]): Stream[B] =
-        foldRight[Stream[B]](Stream.empty)((a, as) => f(a).appendViaFoldRight(as))
-
-      //見つけたら即終了なので便利。
-      def find(p: A => Boolean): Option[A] = filterViaFoldRight(p).headOptionViaFoldRight
-
-      //exercise 5.8
-      def constant[A](a: A): Stream[A] = Stream.cons(a, constant(a))
-
-      //exercise 5.9
-      def from(n: Int): Stream[Int] = Stream.cons(n, from(n + 1))
-
-
-    }
-    case object Empty extends Stream[Nothing]
-    //空でないheadとtailはどちらも非正格。thunk
-    case class Cons[+A](h: () => A, t: () => Stream[A]) extends Stream[A]
-    object Stream {
-      //スマートコンストラクタ
-      def cons[A](hd: => A, tl: => Stream[A]): Stream[A] = {
-        //評価の繰り返しを避けるためにheadとtailの評価の遅延値をキャッシュ
-        lazy val head = hd
-        lazy val tail = tl
-        Cons(() => head, () => tail)
-      }
-
-      //これもスマートコンストラクタらしい
-      def empty[A]: Stream[A] = Empty
-
-      //ふくすうの要素からStreamを作成するための、可変長の引数を持つメソッド
-      def apply[A](as: A*): Stream[A] =
-        if (as.isEmpty) empty
-        else cons(as.head, apply(as.tail: _*))
-
-      //無限ストリーム
-      val ones: Stream[Int] = Stream.cons(1, ones)
-
-    }
-    //println(Stream.ones.take(5).toList)
-    //println(Stream.ones.exists(_ % 2 != 0))
+    //  def main(): Unit = {
+    //    println(Stream.ones.take(5).toList)
+    //  }
+    //}
+    //StreamSample.main()
+    println(Stream.ones.take(5).toList)
+    println(Stream.ones.exists(_ % 2 != 0))
     //下記はスタックオーバーフローになる
     //println(ones.forAll(_ == 1))
   }
