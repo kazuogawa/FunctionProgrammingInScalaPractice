@@ -1,6 +1,7 @@
 package Chapter5
 
 object Chapter5 {
+
   trait Stream[+A] {
     //def headOption: Option[A] = this match {
     //  case Stream.empty => None
@@ -111,13 +112,96 @@ object Chapter5 {
     //答え下記...Noneのことを考えていなかった
     def unfold[A, S](z: S)(f: S => Option[(A, S)]): Stream[A] =
       f(z) match {
-        case Some((h,s)) => Stream.cons(h, unfold(s)(f))
+        case Some((h, s)) => Stream.cons(h, unfold(s)(f))
         case None => Stream.empty
       }
+
+    //exercise 5.12
+    //答え見た。0,1のtupleを受け取るのかー。
+    val fibsViaUnfold: Stream[Int] = unfold((0, 1)) { case (f0, f1) => Some((f0, (f1, f0 + f1))) }
+
+    //なんか雰囲気で書いたがあってた。うーん。。。。
+    def fromViaUnfold(n: Int): Stream[Int] = unfold(n)(s => Some(s, s + 1))
+
+    def constantViaUnfold[A](a: A): Stream[A] = unfold(a)(a => Some(a, a))
+
+    val ones: Stream[Int] = unfold(1)(_ => Some(1, 1))
+
+    //exercise5.13
+    //こたえみた。this入れるの思いつかなかった。unfold(this)した後に{}ってなに？
+    def mapViaUnfold[A, B](f: A => B): Stream[B] = unfold(this) {
+      case Cons(h, t) => Some(f(h()), t())
+      case _ => None
+    }
+
+    //？？？？わからなすぎる
+    def takeViaUnfold[A](n: Int): Stream[A] = unfold((this, n)) {
+      case (Cons(h, t), 1) => Some(h(), (Stream.empty, 0))
+      case (Cons(h, t), n) if n > 1 => Some(h(), (t(), n - 1))
+      case _ => None
+    }
+
+    //雰囲気で書いたらできた。しくみはわからん
+    def takeWhileViaUnfold(p: A => Boolean): Stream[A] = unfold(this) {
+      case Cons(h, t) if p(h()) => Some(h(), t())
+      case _ => None
+    }
+
+    //型わからないので答え見た
+    def zipWithViaUnfold[B, C](s2: Stream[B])(f: (A, B) => C): Stream[C] = unfold((this, s2)) {
+      case (Cons(h1, t1), Cons(h2, t2)) => Some((f(h1(), h2()), (t1(), t2())))
+      case _ => None
+    }
+
+    //何もわからない。zipWithAllってどこから出てきた・・・
+    def zipAll[B](s2: Stream[B]): Stream[(Option[A], Option[B])] =
+      zipWithAll(s2)((_, _))
+
+    def zipWithAll[B, C](s2: Stream[B])(f: (Option[A], Option[B]) => C): Stream[C] =
+      unfold((this, s2)) {
+        case (Empty, Empty) => None
+        case (Cons(h, t), Empty) => Some(f(Some(h()), Option.empty[B]) -> (t(), Stream.empty[B]))
+        case (Empty, Cons(h, t)) => Some(f(Option.empty[A], Some(h())) -> (Stream.empty[A] -> t()))
+        case (Cons(h1, t1), Cons(h2, t2)) => Some(f(Some(h1()), Some(h2())) -> (t1() -> t2()))
+      }
+
+    //exercise 5.14
+    //思いつきもしない
+    def startWith[A](s: Stream[A]): Boolean = {
+      zipAll(s).takeWhileViaUnfold(_._2.isDefined) forAll {
+        case (h, h2) => h == h2
+      }
+    }
+
+    //exercise 5.15
+    //emptyをappendしわすれた。tailを評価するよりdropしたほうがいいのか？streamを評価しなくて済むからかな
+    //def tailsViaUnfold: Stream[Stream[A]] = unfold(this){
+    //  case Cons(_, t) => Some((this, t()))
+    //  case _ => None
+    //}
+    def tails: Stream[Stream[A]] =
+      unfold(this) {
+        case Empty => None
+        case s => Some((s, s drop 1))
+      } appendViaFoldRight Stream(Stream.empty)
+
+    //exercise5.16
+    //型わからなかったので答え見た
+    //答え見てもわからない
+    def scanRight[B](z: B)(f: (A, => B) => B): Stream[B] =
+      foldRight((z, Stream(z)))((a, p0) => {
+        // p0 is passed by-name and used in by-name args in f and cons. So use lazy val to ensure only one evaluation...
+        lazy val p1 = p0
+        val b2 = f(a, p1._1)
+        (b2, Stream.cons(b2, p1._2))
+      })._2
   }
+
   case object Empty extends Stream[Nothing]
+
   //空でないheadとtailはどちらも非正格。thunk
   case class Cons[+A](h: () => A, t: () => Stream[A]) extends Stream[A]
+
   object Stream {
     //スマートコンストラクタ
     def cons[A](hd: => A, tl: => Stream[A]): Stream[A] = {
@@ -145,7 +229,9 @@ object Chapter5 {
 
       go(0, 1)
     }
+
   }
+
   def main(args: Array[String]): Unit = {
     (1 to 4).map(_ + 10).filter(_ % 2 == 0).map(_ * 3)
 
