@@ -129,17 +129,19 @@ object Chapter5 {
 
     //exercise5.13
     //こたえみた。this入れるの思いつかなかった。unfold(this)した後に{}ってなに？
-    def mapViaUnfold[A, B](f: A => B): Stream[B] = unfold(this) {
-      case Cons(h, t) => Some(f(h()), t())
-      case _ => None
-    }
+    //コンパイルできなかった
+    //def mapViaUnfold[A, B](f: A => B): Stream[B] = unfold(this) {
+    //  case Cons(h, t) => Some(f(h()), t())
+    //  case _ => None
+    //}
 
     //？？？？わからなすぎる
-    def takeViaUnfold[A](n: Int): Stream[A] = unfold((this, n)) {
-      case (Cons(h, t), 1) => Some(h(), (Stream.empty, 0))
-      case (Cons(h, t), n) if n > 1 => Some(h(), (t(), n - 1))
-      case _ => None
-    }
+    //コンパイルできなかった
+    //def takeViaUnfold[A](n: Int): Stream[A] = unfold((this, n)) {
+    //  case (Cons(h, t), 1) => Some(h(), (Stream.empty, 0))
+    //  case (Cons(h, t), n) if n > 1 => Some(h(), (t(), n - 1))
+    //  case _ => None
+    //}
 
     //雰囲気で書いたらできた。しくみはわからん
     def takeWhileViaUnfold(p: A => Boolean): Stream[A] = unfold(this) {
@@ -167,7 +169,7 @@ object Chapter5 {
 
     //exercise 5.14
     //思いつきもしない
-    def startWith[A](s: Stream[A]): Boolean = {
+    def startsWith[A](s: Stream[A]): Boolean = {
       zipAll(s).takeWhileViaUnfold(_._2.isDefined) forAll {
         case (h, h2) => h == h2
       }
