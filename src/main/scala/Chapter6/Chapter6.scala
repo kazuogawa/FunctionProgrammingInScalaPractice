@@ -98,14 +98,17 @@ object Chapter6 {
     //exercise 6.5
     def doubleViaMap: Rand[Double] = map(nonNegativeInt)(i => i / (Int.MaxValue.toDouble + 1))
 
+    //これでもOK
+    //def doubleViaMap(rng: RNG): (Double, RNG) =
+    //  map(nonNegativeInt)(_ / Int.MaxValue.toDouble + 1)(rng)
+
     //exercise6.6
     //Rand[Rand[C]]になるので、Randはずしたい.rngをどう合成するのか・・・
     //def map2[A, B, C](ra: Rand[A], rb: Rand[B])(f: (A, B) => C): Rand[C] =
     //  map(ra)(a => map(rb)(b => f(a, b)))
     //答え。そっか、r1かr2だけとりだせばよかったのか
     def map2[A, B, C](ra: Rand[A], rb: Rand[B])(f: (A, B) => C): Rand[C] =
-    //ここのrngって何？
-      rng => {
+      (rng: RNG) => {
         val (a, r1) = ra(rng)
         val (b, r2) = rb(r1)
         (f(a, b), r2)
@@ -128,7 +131,7 @@ object Chapter6 {
 
     //0-nの整数を生成する
     //Int.MaxValueはnで割り切れないことがあるため、再帰的に呼び出し
-    def nonNegativeLessThan(n: Int): Rand[Int] = { rng =>
+    def nonNegativeLessThan(n: Int): Rand[Int] = { (rng: RNG) =>
       val (i, rng2) = nonNegativeInt(rng)
       val mod = i % n
       //わざわざ符号反転しているかもしれないことをこういう表現で表すのはどうなのか・・・
@@ -138,25 +141,100 @@ object Chapter6 {
 
     //exercise 6.8
     //答え見た。なんでこうなるの？根本をわかっていない可能性がある
-    def flatMap[A,B](f: Rand[A])(g: A => Rand[B]): Rand[B] = rng => {
+    def flatMap[A, B](f: Rand[A])(g: A => Rand[B]): Rand[B] = rng => {
       val (a, r1) = f(rng)
       g(a)(r1) // We pass the new state along
     }
+
     //答え見た。なんでこうなるの？根本をわかっていない可能性がある
     def nonNegativeLessThanViaFlatMap(n: Int): Rand[Int] =
       flatMap(nonNegativeInt) { i =>
-        val mod = i% n
-        if (i + (n-1) - mod >= 0) unit(mod) else nonNegativeLessThan(n)
+        val mod = i % n
+        if (i + (n - 1) - mod >= 0) unit(mod) else nonNegativeLessThan(n)
       }
 
     //exercise 6.9
     //全然わかっていないができた
     def mapViaFlatMap[A, B](s: Rand[A])(f: A => B): Rand[B] = flatMap(s)(a => unit(f(a)))
+
     def map2ViaFlatMap[A, B, C](ra: Rand[A], rb: Rand[B])(f: (A, B) => C): Rand[C] =
       flatMap(ra)(a => mapViaFlatMap(rb)(b => f(a, b)))
 
+    //汎用化
+    def mapGeneral[S, A, B](s: S => (A, S))(f: A => B): S => (B, S) = rng => {
+      val (a, rng2) = s(rng)
+      (f(a), rng2)
+    }
   }
 
+  //Randの汎用化
+  //exercise 6.10
+  //全滅。何もわからない
+  //どこに書くかと型がわからない。そしてまたflatMapからかよ・・・
+  case class State[S, +A](run: S => (A, S)) {
+    def flatMap[B](f: A => State[S, B]): State[S, B] = State(s => {
+      val (a, s1) = run(s)
+      f(a).run(s1)
+    })
+
+    def map[B](f: A => B): State[S, B] = flatMap(a => State.unit(f(a)))
+
+    def map2[B, C](sb: State[S, B])(f: (A, B) => C): State[S, C] = flatMap(a => sb.map(b => f(a, b)))
+
+
+  }
+
+  type Rand[A] = State[RNG, A]
+
+  //コンパニオンオブジェクト...case classと同じ名前のオブジェクトで、
+  // case class作った後にコンパニオンオブジェクトのメンバにアクセスできる
+  object State {
+    //型がわからなかったので答え見た
+    def unit[S, A](a: A): State[S, A] = State(s => (a, s))
+
+    def sequence[S, A](sas: List[State[S, A]]): State[S, List[A]] =
+      sas.foldRight(unit[S, List[A]](List()))((f, acc) => f.map2(acc)(_ :: _))
+
+    def get[S]: State[S, S] = State(s => (s, s))
+
+    def set[S](s: S): State[S, Unit] = State(_ => ((), s))
+
+    def modify[S](f: S => S): State[S, Unit] = for {
+      s <- get
+      _ <- set(f(s))
+    } yield ()
+  }
+
+  //exercise 6.11
+  sealed trait Input
+
+  case object Coin extends Input
+
+  case object Turn extends Input
+
+  import State._
+
+  case class Machine(locked: Boolean = true, candies: Int, coins: Int) {
+    //答えみた。書き方わかったら条件はかけるが、、、、、
+    def update: Input => Machine => Machine = (i: Input) => (s: Machine) =>
+      (i, s) match {
+        //candyがなかったら全て無視
+        case (_, Machine(_, 0, _)) => s
+        //ロックが外れた状態でコインをいれても変化なし
+        case (Coin, Machine(false, _, _)) => s
+        //ロックがかかっている状態でturnしても変化なし
+        case (Turn, Machine(true, _, _)) => s
+        //ロックがかかっている状態でコインを入れるとロックが外れる
+        case (Coin, Machine(true, candy, coin)) => Machine(false, candy, coin + 1)
+        //ロックがかかっていない状態でTurnするとcandyが減って、ロックされる
+        case (Turn, Machine(false, candy, coin)) => Machine(true, candy - 1, coin)
+      }
+
+    def simulateMachine(inputs: List[Input]): State[Machine, (Int, Int)] = for {
+      _ <- sequence(inputs map (modify[Machine] _ compose update))
+      s <- get
+    } yield (s.coins, s.candies)
+  }
 
   def main(args: Array[String]): Unit = {
     val rng = new scala.util.Random
@@ -181,5 +259,8 @@ object Chapter6 {
       println(simpleRNG.double(SimpleRNG(i)))
     }
     println(simpleRNG.ints(10)(simpleRNG))
+
+    val testMachine: Machine = Machine(candies = 5, coins = 10)
+    testMachine.simulateMachine(List(Coin, Turn, Coin, Turn, Coin, Turn, Coin, Turn))
   }
 }
