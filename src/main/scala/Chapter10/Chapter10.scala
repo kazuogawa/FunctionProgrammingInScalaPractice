@@ -107,6 +107,7 @@ object Chapter10 {
 
   //exercise 10.9
   //いみがわからなかった・・・
+  //昇順で並んでいるかどうかを確認するだけか。
   def ordered(ints: IndexedSeq[Int]): Boolean = {
     val mon: Monoid[Option[(Int, Int, Boolean)]] = new Monoid[Option[(Int, Int, Boolean)]] {
       def op(o1: Option[(Int, Int, Boolean)], o2: Option[(Int, Int, Boolean)]): Option[(Int, Int, Boolean)] =
@@ -117,10 +118,133 @@ object Chapter10 {
           case (x, None) => x
           case (None, x) => x
         }
+
       val zero: Option[Nothing] = None
     }
     foldMapV(ints, mon)(i => Some((i, i, true))).forall(_._3)
   }
+
+  sealed trait WC
+
+  //完全な単語を検出していない状態(よくわからない
+  case class Stub(chars: String) extends WC
+
+  //words...それまでに検出された単語の数
+  //lStub...単語の左側で検出された部分的な単語が格納される
+  //rStub...右側で検出された部分的な単語が格納される
+  //"lorem ipsum do"だと、Part("lorem", 1, "do")になるらしい
+  //"lor sit amet, "だとPart("lor", 2, "")になる.lorで始まって単語が2個あって、部分的なものがないので、rStubは""になる
+  case class Part(lStub: String, words: Int, rStub: String) extends WC
+
+  //exercise 10.10
+  val wcMonoid: Monoid[WC] = new Monoid[WC] {
+    //答え見た。自動販売機のやつみたいにmatchでいろいろ作ればよかったのか。fordLeftとかで畳み込む処理を描くのかと思っていた。
+    //opだから最小限の処理だけ書けばよかったのか。忘れてた
+    def op(a1: WC, a2: WC): WC = (a1, a2) match {
+      case (Stub(c), Stub(d)) => Stub(c + d)
+      case (Stub(c), Part(l, w, r)) => Part(c + l, w, r)
+      case (Part(l, w, r), Stub(c)) => Part(l, w, r + c)
+      //TODO:isEmpty になることってあるのか？どういう時？
+      case (Part(l1, w1, r1), Part(l2, w2, r2)) =>
+        Part(l1, w1 + (if ((r1 + l2).isEmpty) 0 else 1) + w2, r2)
+    }
+
+    def zero: WC = Stub("")
+  }
+
+  //exercise 10.11
+  //こたえみた。全然思いつかない
+  //M.op(f(x), f(y)) == f(N.op(x,y))が当てはまるらしい
+  def wordCount(s: String): Int = {
+    def wc(c: Char): WC = if (c.isWhitespace) Part("", 0, "") else Stub(c.toString)
+
+    def unstab(s: String): Int = s.length min 1
+
+    foldMapV(s.toIndexedSeq, wcMonoid)(wc) match {
+      case Stub(s) => unstab(s)
+      case Part(l, w, r) => unstab(l) + w + unstab(r)
+    }
+  }
+
+  trait Foldable[F[_]] {
+    def foldRight[A, B](as: F[A])(z: B)(f: (A, B) => B): B
+
+    def foldLeft[A, B](as: F[A])(z: B)(f: (B, A) => B): B
+
+    def foldMap[A, B](as: F[A])(f: A => B)(mb: Monoid[B]): B
+
+    def concatenate[A](as: F[A])(m: Monoid[A]): A
+
+    //exercise 10.15
+    //わからん
+    def toList[A](fa: F[A]): List[A] = foldRight(fa)(List[A]())(_ :: _)
+
+  }
+
+  //exercise 10.12
+  //こたえみた。objectなのか
+  object ListFoldable extends Foldable[List] {
+    //これ通常のListと何が違うの？
+    override def foldRight[A, B](as: List[A])(z: B)(f: (A, B) => B): B = as.foldRight(z)(f)
+
+    //これ通常のListと何が違うの？
+    override def foldLeft[A, B](as: List[A])(z: B)(f: (B, A) => B): B = as.foldLeft(z)(f)
+
+    override def foldMap[A, B](as: List[A])(f: A => B)(mb: Monoid[B]): B =
+      foldLeft(as)(mb.zero)((b, a) => mb.op(b, f(a)))
+
+    override def concatenate[A](as: List[A])(m: Monoid[A]): A = foldLeft(as)(m.zero)(m.op)
+  }
+
+  object IndexedFoldable extends Foldable[IndexedSeq] {
+    override def foldRight[A, B](as: IndexedSeq[A])(z: B)(f: (A, B) => B): B = as.foldRight(z)(f)
+
+    override def foldLeft[A, B](as: IndexedSeq[A])(z: B)(f: (B, A) => B): B = as.foldLeft(z)(f)
+
+    //なんでここはfoldMapV?
+    override def foldMap[A, B](as: IndexedSeq[A])(f: A => B)(mb: Monoid[B]): B =
+      foldMapV(as, mb)(f)
+
+    override def concatenate[A](as: IndexedSeq[A])(m: Monoid[A]): A =
+      foldLeft(as)(m.zero)(m.op)
+  }
+
+  object StreamFoldable extends Foldable[Stream] {
+    override def foldRight[A, B](as: Stream[A])(z: B)(f: (A, B) => B): B = as.foldRight(z)(f)
+
+    override def foldLeft[A, B](as: Stream[A])(z: B)(f: (B, A) => B): B = as.foldLeft(z)(f)
+
+    //foldMapとfoldRightの使い分けが謎
+    override def foldMap[A, B](as: Stream[A])(f: A => B)(mb: Monoid[B]): B =
+      foldRight(as)(mb.zero)((a, b) => mb.op(f(a), b))
+
+    override def concatenate[A](as: Stream[A])(m: Monoid[A]): A =
+      foldLeft(as)(m.zero)(m.op)
+  }
+
+  //exercise 10.14
+  //こたえみた。ただのしゃきょうになりつつある
+  object OptionFoldable extends Foldable[Option] {
+    override def foldRight[A, B](as: Option[A])(z: B)(f: (A, B) => B): B = as match {
+      case None => z
+      case Some(a) => f(a, z)
+    }
+
+    override def foldLeft[A, B](as: Option[A])(z: B)(f: (B, A) => B): B = as match {
+      case None => z
+      case Some(a) => f(z, a)
+    }
+
+    override def foldMap[A, B](as: Option[A])(f: A => B)(mb: Monoid[B]): B = as match {
+      case None => mb.zero
+      case Some(a) => f(a)
+    }
+
+    override def concatenate[A](as: Option[A])(m: Monoid[A]): A =
+      foldLeft(as)(m.zero)(m.op)
+  }
+
+  //わからん
 
   def main(args: Array[String]): Unit = {
     val words: List[String] = List("Hic", "Est", "Index")
@@ -133,5 +257,7 @@ object Chapter10 {
 
     println(foldMap(List(1.1, 2.2, 3.3), intAddition)(_.toInt))
     println(foldMap(List('a', 'b', 'c'), stringMonoid)(_.toString))
+    println(ordered(IndexedSeq(1, 10, 11, 3, 409, 23)))
+    println(ordered(IndexedSeq(1, 10, 11)))
   }
 }
