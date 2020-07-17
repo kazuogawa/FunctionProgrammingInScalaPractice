@@ -187,6 +187,7 @@ object Chapter10 {
     //これ通常のListと何が違うの？
     override def foldRight[A, B](as: List[A])(z: B)(f: (A, B) => B): B = as.foldRight(z)(f)
 
+    //↑↓互いに呼び出しているので、trait側実装しないとsof発生しちゃう
     //これ通常のListと何が違うの？
     override def foldLeft[A, B](as: List[A])(z: B)(f: (B, A) => B): B = as.foldLeft(z)(f)
 
@@ -244,7 +245,59 @@ object Chapter10 {
       foldLeft(as)(m.zero)(m.op)
   }
 
-  //わからん
+  //exercise 10.15はFoldableに記述
+
+  //exercise 10.16
+  //証明って何をすればいいのかわからん
+  //こたえみた。単純にopとzero作ればよかったのか
+  def productMonoid[A, B](A: Monoid[A], B: Monoid[B]): Monoid[(A, B)] =
+    new Monoid[(A, B)] {
+      def op(x: (A, B), y: (A, B)): (A, B) = (A.op(x._1, y._1), B.op(x._2, y._2))
+
+      def zero: (A, B) = (A.zero, B.zero)
+    }
+
+  //値の型がモノイドであることを前提にkeyとvalueからなるMapをマージするモノイド
+  def mapMergeMonoid[K, V](V: Monoid[V]): Monoid[Map[K, V]] = new Monoid[Map[K, V]] {
+    def zero: Map[K, V] = Map[K, V]()
+
+    //keySet...MapのKeyのSetを返す
+    //kがaのだったらaからvalue取って, bのだったらbからvalueとる。.zeroは合成してもなにもかわらん
+    //すげえ周りくどい合成しているように見える。普通にa ++ bじゃいかんのか
+    //def op2(a: Map[K, V], b: Map[K, V]): Map[K, V] = a ++ b
+    //a ++ bだったら、同じkeyのデータの合成ができないからか・・・！納得
+    def op(a: Map[K, V], b: Map[K, V]): Map[K, V] =
+      (a.keySet ++ b.keySet).foldLeft(zero) { (acc, k) =>
+        acc.updated(k, V.op(a.getOrElse(k, V.zero), b.getOrElse(k, V.zero)))
+      }
+  }
+
+  val M: Monoid[Map[String, Map[String, Int]]] = mapMergeMonoid(mapMergeMonoid(intAddition))
+  //入れ子の式も結合可能！！！
+  val m1: Map[String, Map[String, Int]] = Map("o1" -> Map("i1" -> 1, "i2" -> 2))
+  val m2: Map[String, Map[String, Int]] = Map("o1" -> Map("i2" -> 3))
+  val m3: Map[String, Map[String, Int]] = M.op(m1, m2)
+
+  //exercise 10.17
+  //こたえみた
+  def functionMonoid[A, B](B: Monoid[B]): Monoid[A => B] = new Monoid[A => B] {
+    override def zero: A => B = _ => B.zero
+
+    //composeすればおっけーってわけではないのかー
+    //override def op(a1: A => B, a2: A => B): A => B = a1.compose(a2)
+    override def op(a1: A => B, a2: A => B): A => B = a => B.op(a1(a), a2(a))
+  }
+
+  //exercise 10.18
+  //こたえみた
+  //asをstring -> intのmapにするところまでは分かったが、その先が思いつかなかった
+  //foldMapVの第二引数にAをMap(a -> 1)にする処理でMap変換した後に,
+  //mapMergeMonoidにintAdditionのMonoid渡してintAdditionのop使ってMergeしたのかー
+  def bag[A](as: IndexedSeq[A]): Map[A, Int] =
+    foldMapV(as, mapMergeMonoid[A, Int](intAddition))((a: A) => Map(a -> 1))
+
+  //リストの長さと合計を同時に計算
+  val p: (Int, Int) = ListFoldable.foldMap(List(1,2,3,4))(a => (1, a))(productMonoid(intAddition, intAddition))
 
   def main(args: Array[String]): Unit = {
     val words: List[String] = List("Hic", "Est", "Index")
@@ -259,5 +312,9 @@ object Chapter10 {
     println(foldMap(List('a', 'b', 'c'), stringMonoid)(_.toString))
     println(ordered(IndexedSeq(1, 10, 11, 3, 409, 23)))
     println(ordered(IndexedSeq(1, 10, 11)))
+    println(bag(Vector("a", "rose", "is", "a", "rose")))
+    println(p)
+    //平均を計算
+    println(p._2 / p._1.toDouble)
   }
 }
