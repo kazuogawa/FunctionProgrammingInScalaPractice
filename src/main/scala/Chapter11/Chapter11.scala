@@ -76,6 +76,12 @@ object Chapter11 {
     def flatMapViaCompose[A, B](ma: F[A])(f: A => F[B]): F[B] =
       compose((_: Unit) => ma, f)(())
 
+    //exercise 11.12
+    //flatMapを使って実装
+    //こたえみた
+    //flatMap = flatten + mapなのでflattenするだけってことか
+    def join[A](mma: F[F[A]]): F[A] = flatMap(mma)(ma => ma)
+
   }
 
   //ふぁんくたはmapがある。
@@ -156,6 +162,17 @@ object Chapter11 {
     //Some(v).flatMap(f).flatMap(g) == Some(v).flatMap(a => f(a).flatMap(g)) xをSome(v)に置き換え
     //f(v).flatMap(g) == (a => f(a).flatMap(g))(v) Some(v).flatMap(...)の定義を適用
     //f(v).flatMap(g) == f(v).flatMap(g) 関数適用を簡約
+
+    //ゼロがappendの単位元
+    //composeの単位元はunit。よって
+    //compose(f, unit) == f
+    //compose(unit, f) == f
+    //flatMapでも表現できるが明白ではない
+    //flatMap(x)(unit) == x
+    //flatMap(unit(y))(f) == f(y)
+
+    //exercise 11.10, 11
+    //証明は諦め・・・
 
 
   }
