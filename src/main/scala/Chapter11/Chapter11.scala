@@ -216,6 +216,7 @@ object Chapter11 {
   getState.flatMap(setState) == unit(())
 
   written as for-comprehension:
+
   for {
     x <- getState
     _ <- setState(x)
@@ -264,9 +265,17 @@ object Chapter11 {
 
   object Reader {
     def readerMonad[R]: Monad[({type f[x] = Reader[R, x]})#f] = new Monad[({type f[x] = Reader[R, x]})#f] {
-      def unit[A](a: => A): Reader[R, A] = ???
+      def unit[A](a: => A): Reader[R, A] = Reader(_ => a)
 
-      def flatMap[A, B](st: Reader[R, A])(f: A => Reader[R, B]): Reader[R, B] = ???
+      //ここから答え見た。Readerで包むのか・・・
+      def flatMap[A, B](st: Reader[R, A])(f: A => Reader[R, B]): Reader[R, B] = Reader(r => f(st.run(r)).run(r))
+
+      //sequence, join, replicateMと言ったモナド関数にどのような実装になる？inttelijがサジェストしてきたこれがあっているのか？
+      override def sequence[A](lma: List[Reader[R, A]]): Reader[R, List[A]] = super.sequence(lma)
+
+      override def join[A](mma: Reader[R, Reader[R, A]]): Reader[R, A] = super.join(mma)
+
+      override def replicateM[A](n: Int, ma: Reader[R, A]): Reader[R, List[A]] = super.replicateM(n, ma)
     }
   }
 
