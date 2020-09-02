@@ -1,6 +1,8 @@
 package Chapter12
 
-import Chapter11.Chapter11.Functor
+import java.util.Date
+
+import Chapter11.Chapter11.{Functor, Monad}
 
 object Chapter12 {
 
@@ -56,7 +58,7 @@ object Chapter12 {
 
     //アプリカティブという名前は、別のプリミティブ(unitとapply)を使ってApplicativeインターフェースを表現できることに由来
     //exercise 12.2
-    def apply[A, B](fab: F[A => B])(fa: F[A]): F[B]
+    def apply[A, B](fab: F[A => B])(fa: F[A]): F[B] = map2(fab, fa)(_ (_))
 
     //unitとapplyでmap2とmapを定義
     //答え見た。map使ってんじゃん・・・curry化して、A => B => Cにした後に
@@ -123,13 +125,150 @@ object Chapter12 {
       //無限の定数ストリーム
       override def unit[A](a: => A): Stream[A] = Stream.continually(a)
 
-      override def apply[A, B](fab: Stream[A => B])(fa: Stream[A]): Stream[B] = ???
-
       //exercise 12.4
       //sequenceにどのような意味があるか
       //Listにまとめられる？ってこと？
       override def sequence[A](a: List[Stream[A]]): Stream[List[A]] = super.sequence(a)
     }
+  }
+
+  //exercise 12.5
+
+  def eitherMonad[E]: Monad[({type f[x] = Either[E, x]})#f] = new Monad[({type f[x] = Either[E, x]})#f] {
+    //override def unit[A](a: => A): Either[E, A] = Either(_ => a)
+    //答え見た。そっかunitだからRightしか返さないのか・・・
+    override def unit[A](a: => A): Either[E, A] = Right(a)
+
+    override def flatMap[A, B](ma: Either[E, A])(f: A => Either[E, B]): Either[E, B] = ma match {
+      case Right(value) => f(value)
+      //case _ => _
+      //答えではこうなっているが上記でもOK?
+      case Left(e) => Left(e)
+    }
+  }
+
+  //flatMapとmap3の違い
+  //Either[String, T]の型を使用していることを前提とする
+  //validNameがエラーで失敗した場合validBirthdateとvalidPhoneは実行すらされない
+  //validName(field1) flatMap (f1 =>
+  //  validBirthdate(field2) flatMap (f2 =>
+  //    validPhone(filed3) map (f3 => WebForm(f1,f2,f3))
+  //    )
+  //  )
+  //map3には3つの式に依存関係があることは明示されていない。
+  //各EitherのエラーをListに集めそうなイメージだが、map3がflatMapで実装されている場合は、1つ目のエラーで停止してしまう
+  //map3(
+  //  validName(field1),
+  //  validBirthdate(filed2),
+  //  validPhone(filed3))(WebForm(_, _, _)
+  //)
+
+  sealed trait Validation[+E, +A]
+
+  case class Failure[E](head: E, tail: Vector[E] = Vector()) extends Validation[E, Nothing]
+
+  case class Success[A](a: A) extends Validation[Nothing, A]
+
+  //exercise 12.6
+  //答えみた。インスタンスって言ってたからval ~~~ = new ~~~かと思ったらdefだった
+  def validationApplicative[E]: Applicative[({type f[x] = Validation[E, x]})#f] =
+    new Applicative[({type f[x] = Validation[E, x]})#f] {
+      //これはEitherMonadと一緒な感じ
+      def unit[A](a: => A): Success[A] = Success(a)
+
+      //やっぱmatch caseするしかないのか・・・
+      override def map2[A, B, C](fa: Validation[E, A], fb: Validation[E, B])(f: (A, B) => C): Validation[E, C] =
+        (fa, fb) match {
+          case (Success(a), Success(b)) => Success(f(a, b))
+          case (Failure(h1, t1), Failure(h2, t2)) =>
+            Failure(h1, t1 ++ Vector(h2) ++ t2)
+          //e@ってなんだっけ・・・？Failureだったらそれをeに入れるってこと？
+          case (e@Failure(_, _), _) => e
+          case (_, e@Failure(_, _)) => e
+        }
+
+    }
+
+  case class WebForm(name: String, birthdate: Date, phoneNumber: String) {
+    //これらの関数ってcase classの中がいいのか、そとがいいのか。trait作ってvalidateにまとめるのがいいのか
+    def validName(name: String): Validation[String, String] =
+      if (name != "") Success(name)
+      else Failure("Name cannot be empty")
+
+    def validBirthdate(birthdate: String): Validation[String, Date] =
+      try {
+        import java.text._
+        Success(new SimpleDateFormat("yyyy-MM-dd").parse(birthdate))
+      } catch {
+        //参考書はcaseがない
+        case _: Exception => Failure("Birthdate must be in the form yyyy-MM-dd")
+      }
+
+    def validPhone(phoneNumber: String): Validation[String, String] =
+      if (phoneNumber.matches("[0-9]{10}"))
+        Success(phoneNumber)
+      else Failure("Phone number numst be 10 digits")
+
+    //map3の実装どうするの？
+    //def validWebForm(name: String, birthdate: String, phone: String): Validation[String, WebForm] =
+    //  map3(validName(name), validBirthdate(birthdate),
+    //    validPhone(phone))(WebForm)
+  }
+
+  //ファンクタ則
+  //map(v)(id) == v
+  //map(map(v)(g))(f) == map(v)(f compose g)
+
+  //アプリカティブファンクタはmapの実装ベースがmap2とunitであることから、他の法則として
+  //def map[A, B](fa: F[A])(f: A => B): F[B] =
+  ////右単位元の法則
+  //  map2(fa, unit())((a, _) => f(a))
+
+  ////これでもいい
+  //def map[A, B](fa: F[A])(f: A => B): F[B] =
+  ////左単位元の法則
+  //  map2(unit(), fa)((_, a) => f(a))
+
+  //次にmap3について
+  //def map3[A, B, C, D](fa: F[A], fb: F[B], fc: F[C])(f: (A, B, C) => D): F[D]
+  //上記シグネチャより
+  //op(a, op(b, c) == op(op(a, b), c)
+  //compose(f, op(g,h) == compose(compose(f, g),h)
+  //アプリカティブファンク他の結合則も全体の考え方は同じ
+  //上記の法則がなかればどっちから関数を当てるかをわけるmap3L,map3Rのようなことをしないといけない。
+  //def product[A, B](fa: F[A], F[B]): F[A, B] =
+  //  map2(fa,fb)((_, _))
+  def assoc[A, B, C](p: (A, (B, C)): ((A, B), C) =
+    p match {
+      case (a, (b, c)) => ((a, b), c)
+      case _ => _
+    }
+
+  //productコンビネータとassocコンビネータをを使用した場合、アプリカティブファンクタの結合則は下記になる
+  //左は左結合、右は右結合になっているのに注意
+  //product(product(fa, fb), fc) == map(product(fa, product(fb, fc)))(assoc)
+
+  val F: Applicative[Option] = new Applicative[Option] {
+    override def map2[A, B, C](fa: Option[A], fb: Option[B])(f: (A, B) => C): Option[C] = ???
+
+    override def unit[A](a: => A): Option[A] = ???
+  }
+
+  case class Employee(name: String, id: Int)
+
+  case class Pay(rate: Double, hoursPerYear: Double)
+
+  def format(e: Option[Employee], pay: Option[Pay]): Option[String] =
+    F.map2(e, pay) { (e, pay) =>
+      s"${e.name} makes ${pay.rate * pay.hoursPerYear}"
+    }
+
+  val e: Option[Employee] = ???
+  val pay: Option[Pay] = ???
+  format(e, pay)
+
+  def format(e: Option[String], pay: Option[Double]): Option[String] = {
+    F.map2(e, pay) { (e, pay) => s"$e makes $pay" }
   }
 
 }
