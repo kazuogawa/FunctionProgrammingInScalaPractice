@@ -2,7 +2,9 @@ package Chapter12
 
 import java.util.Date
 
+import Chapter10.Chapter10.{Foldable, Monoid}
 import Chapter11.Chapter11.{Functor, Monad}
+import Chapter6.Chapter6.State
 
 object Chapter12 {
 
@@ -118,17 +120,86 @@ object Chapter12 {
 
     //exercise 12.11
     //monadでcomposeを記述できないことを試す
-    def composeViaMonad[G[_]](G: Monad[G]): Monad[({type f[x] = F[G[x]]})#f] = {
-      val self = this
-      new Monad[({type f[x] = F[G[x]]})#f] {
-        override def unit[A](a: => A): F[G[A]] = self.unit(G.unit(a))
+    //def composeViaMonad[G[_]](G: Monad[G]): Monad[({type f[x] = F[G[x]]})#f] = {
+    //  val self = this
+    //  new Monad[({type f[x] = F[G[x]]})#f] {
+    //    override def unit[A](a: => A): F[G[A]] = self.unit(G.unit(a))
 
-        //できないらしい
-        //override def flatMap[A, B](fa: F[G[A]])(f: A => F[G[B]]): F[G[B]] =
-        // self.flatMap(na => G.flatMap(na)(a => ???))
+    //    //できないらしい
+    //    //override def flatMap[A, B](fa: F[G[A]])(f: A => F[G[B]]): F[G[B]] =
+    //    // self.flatMap(na => G.flatMap(na)(a => ???))
+    //  }
+    //}
+
+    //アプリカティブファンクタを発見したのは、traverse関数とsequence関数、及びその他の演算がflatMapに直接依存しないことに気づいた結果
+    //traverseとsequenceを再度一般化すればもう一つの抽象概念を発見できる
+    //def traverse[F[_], A, B](as: List[A])(f: A => F[B]): F[List[B]]
+
+    //def sequence[F[_], A](fas: List[F[A]]): F[List[A]]
+
+    //Applicativeのような抽象インターフェースでListのような具体的な方コンストラクタが使用されていたときは
+    // この型コンストラクタを抽象化したらどうなるかについてかんがえてみる
+    //List以外のデータの一部はFoldable
+    //List以外にもとらバーサブルなデータ型は存在する
+
+    //exercise 12.12
+    //Mapで実装
+    //こたえみた。なるほどーってなった
+    def sequenceMap[K, V](ofa: Map[K, F[V]]): F[Map[K, V]] =
+      ofa.foldLeft(unit(Map[K, V]())) { case (acc, (k, fv)) =>
+        map2(acc, fv)((m, v) => m + (k -> v))
       }
+
+    //トラバーサブルなデータの数が多いことを考えると、それぞれに特化したsequence,traverseメソッドを記述するわけにはいかない
+    //あたらしいinterfaceが必要
+    trait Traverse[F[_]] {
+      def traverse[G[_] : Applicative, A, B](fa: F[A])(f: A => G[B]): G[F[B]] =
+        sequence(map(fa)(f))
+
+      //Gがアプリカティブファンクタである限りFとGを入れ替える。これはかなり抽象的で代数的な概念
+      def sequence[G[_] : Applicative, A](fga: F[G[A]]): G[F[A]] =
+        traverse(fga)(ga => ga)
     }
+
+    //exercise12.13
+    //こたえみた。overrideするひつようがあるのか。どっちをoverrideするかってどうかんがえればいいのだろう。
+    //今回はtraverseインスタンスだからtraverseのみ？
+    //implicitが突然出てきたけど、何で？GはApplicative前提ってことを書きたい？
+    val listTraverse: Traverse[List] = new Traverse[List] {
+      override def traverse[G[_], A, B](as: List[A])(f: A => G[B])(implicit G: Applicative[G]): G[List[B]] =
+        as.foldRight(G.unit(List[B]()))((a, fbs) => G.map2(f(a), fbs)(_ :: _))
+    }
+
+    val optionTraverse: Traverse[Option] = new Traverse[Option] {
+      override def traverse[G[_], A, B](oa: Option[A])(f: A => G[B])(implicit G: Applicative[G]): G[Option[B]] =
+        oa match {
+          case Some(a) => G.map(f(a))(Some(_))
+          case None => G.unit(None)
+        }
+    }
+
+    case class Tree[+A](head: A, tail: List[Tree[A]])
+
+    //理解できなかったので、勉強会の時質問する
+    val treeTraverse: Traverse[Tree] = new Traverse[Tree] {
+      override def traverse[G[_], A, B](ta: Tree[A])(f: A => G[B])(implicit G: Applicative[G]): G[Tree[B]] =
+        G.map2(f(ta.head), listTraverse.traverse(ta.tail)(a => traverse(a)(f)))(Tree(_, _))
+    }
+
+
   }
+
+  //sequenceの具体的な型シグネチャ
+  //List[Option[A]] => Option[List[A]]
+  //Traverse[List].sequenceの呼び出しは、ListのいずれかがNoneの場合にNoneを返す。それ以外の場合は元のListをSomeにラッピングして返す
+  //Tree[Option[A]] => Option[Tree[A]]
+  //Traverse[Tree].sequenceの呼び出しは、TreeのいずれかがNoneの場合にNone,それ以外の場合はTreeをSomeにラッピング
+  //Map[K, Par[A]] => Par[Map[K,A]]
+  //Traverse[Map[K, _]].sequenceの呼び出しは、マッピングの全ての値を同時に評価する並列計算を実行する
+  //以上のことからsequence, traverseをベースとして驚くべき数の演算を可能な限り汎用的な方法で定義できることがわかる
+  //トラバーサブルは何らかのデータの構造を受け取り、そのデータ構造に含まれているデータに関数を順番に適用して結果を生成するという点では畳み込みににている
+  //ただし、traverseが元の構造を維持するのとは対照的に、foldMapは元の構造を削除してモノイドの演算と置き換える
+  //例えばTree[Option[A] => Option[Tree[A]]はモノイドを使って値を破壊するのではなく、Tree構造を維持していることがわかる
 
 
   //flatMapに基づいてmap2のデフォルト実装を提供すればMonad[F]をApplicative[F]の部分型(subtype)にすることが可能
@@ -145,10 +216,11 @@ object Chapter12 {
     override def map[A, B](fa: F[A])(f: A => B): F[B] =
       flatMap(fa)(a => unit(f(a)))
 
-    def map2[A, B, C](fa: F[A], fb: F[B])(f: (A, B) => C): F[C] =
+    override def map2[A, B, C](fa: F[A], fb: F[B])(f: (A, B) => C): F[C] =
       flatMap(fa)(a => map(fb)(b => f(a, b)))
 
   }
+
 
   //今のところはAPIの関数を整理して型シグネチャにしたがって実装しているだけ・・・笑
 
@@ -174,7 +246,8 @@ object Chapter12 {
     //exercise 12.4
     //sequenceにどのような意味があるか
     //Listにまとめられる？ってこと？
-    override def sequence[A](a: List[Stream[A]]): Stream[List[A]] = super.sequence(a)
+    override def sequence[A](lsa: List[Stream[A]]): Stream[List[A]] =
+      lsa.foldRight(unit(List[A]()))((sa, sla) => map2(sa, sla)(_ :: _))
   }
   //exercise 12.5
 
@@ -257,6 +330,8 @@ object Chapter12 {
     //def validWebForm(name: String, birthdate: String, phone: String): Validation[String, WebForm] =
     //  map3(validName(name), validBirthdate(birthdate),
     //    validPhone(phone))(WebForm)
+
+
   }
 
   //ファンクタ則
@@ -347,5 +422,229 @@ object Chapter12 {
   //    (u => fa)(()) == fa
   //    fa == fa
 
+
+  //exercise 12.14
+  //こたえみた
+  //Applicativeを作成
+  type Id[A] = A
+  //monadの作成
+  val idMonad: Monad[Id] = new Monad[Id] {
+    def unit[A](a: => A): Id[A] = a
+
+    override def flatMap[A, B](fa: Id[A])(f: A => Id[B]): Id[B] = f(fa)
+  }
+
+  //traveseSを実装するために下記Monadを記述
+  object Monad {
+
+    // Notice that in the case of a `Left`, flatMap does nothing.
+    def eitherMonad[E]: Monad[({type f[x] = Either[E, x]})#f] =
+      new Monad[({type f[x] = Either[E, x]})#f] {
+        def unit[A](a: => A): Either[E, A] = Right(a)
+
+        override def flatMap[A, B](eea: Either[E, A])(f: A => Either[E, B]) = eea match {
+          case Right(a) => f(a)
+          case Left(b) => Left(b)
+        }
+      }
+
+    def stateMonad[S] = new Monad[({type f[x] = State[S, x]})#f] {
+      def unit[A](a: => A): State[S, A] = State(s => (a, s))
+
+      override def flatMap[A, B](st: State[S, A])(f: A => State[S, B]): State[S, B] =
+        st flatMap f
+    }
+
+    // Monad composition
+    def composeM[G[_], H[_]](implicit G: Monad[G], H: Monad[H], T: Traverse[H]):
+    Monad[({type f[x] = G[H[x]]})#f] = new Monad[({type f[x] = G[H[x]]})#f] {
+      def unit[A](a: => A): G[H[A]] = G.unit(H.unit(a))
+
+      override def flatMap[A, B](mna: G[H[A]])(f: A => G[H[B]]): G[H[B]] =
+        G.flatMap(mna)(na => G.map(T.traverse(na)(f))(H.join))
+    }
+
+  }
+
+
+  trait Traverse[F[_]] extends Functor[F] {
+    def traverse[G[_], A, B](fa: F[A])(f: A => G[B])(implicit G: Applicative[G]): G[F[B]] = sequence(map(fa)(f))
+
+    def sequence[G[_], A](fga: F[G[A]])(implicit G: Applicative[G]): G[F[A]] = traverse(fga)(ga => ga)
+
+    def map[A, B](fa: F[A])(f: A => B): F[B] = traverse[Id, A, B](fa)(f)(idMonad)
+
+
+    def traverseS[S, A, B](fa: F[A])(f: A => State[S, B]): State[S, F[B]] =
+      traverse[({type f[x] = State[S, x]})#f, A, B](fa)(f)(Monad.stateMonad)
+
+    def zipWithIndex[A](ta: F[A]): F[(A, Int)] =
+      traverseS(ta)((a: A) => for {
+        i <- State.get[Int]
+        _ <- State.set(i + 1)
+      } yield (a, i)).run(0)._1
+
+    def toList[A](fa: F[A]): List[A] =
+      traverseS(fa)((a: A) => for {
+        as <- State.get[List[A]]
+        _ <- State.set(a :: as)
+      } yield ()).run(Nil)._2.reverse
+
+    def mapAccum[S, A, B](fa: F[A], s: S)(f: (A, S) => (B, S)): (F[B], S) =
+      traverseS(fa)((a: A) => for {
+        s1 <- State.get[S]
+        (b, s2) = f(a, s1)
+        _ <- State.set(s2)
+      } yield b).run(s)
+
+    def toList[A](fa: F[A]): List[A] =
+      mapAccum(fa, List[A]())((a, s) => ((), a :: s))._2.reverse
+
+    def zipWithIndex[A](fa: F[A]): F[(A, Int)] =
+      mapAccum(fa, 0)((a, s) => ((a, s), s + 1))._1
+
+    //exercise 12.16
+    //答え見た。挙動は謎・・・
+    def reverse[A](fa: F[A]): F[A] =
+      mapAccum(fa, toList(fa).reverse)((_, as) => (as.head, as.tail))._1
+
+
+    //List, Tree, 他のトラバーサブルファンクタにとってそれが何を意味するのか考察せよ
+    //答えなかった
+
+    //全て下記を満たす
+    //toList(reverse(x)) ++ toList(reverse(y)) == reverse(toList(y) ++ toList(x))
+
+    //exercise 12.17
+    //答え見た。思いつかない・・・
+    def foldLeft[A, B](fa: F[A])(z: B)(f: (B, A) => B): B =
+      mapAccum(fa, z)((a, b) => ((), f(b, a)))._2
+
+    //形状が異なる引数は処理できない事に注意
+    //FがListである場合Listの長さが異なる場合は処理できない
+    def zip[A, B](fa: F[A], fb: F[B]): F[(A, B)] =
+      mapAccum(fa, toList(fb)) {
+        case (_, Nil) => sys.error("zip: Incompatible shapes.")
+        case (a, b :: bs) => ((a, b), bs)
+      }._1
+
+    //どちらか一方の引数の形状が優先されるバージョン
+
+    def zipL[A, B](fa: F[A], fb: F[B]): F[(A, Option[B])] =
+      mapAccum(fa, toList(fb)) {
+        case (a, Nil) => ((a, None), Nil)
+        case (a, b :: bs) => ((a, Some(b)), bs)
+      }._1
+
+    def zipR[A, B](fa: F[A], fb: F[B]): F[(Option[A], B)] =
+      mapAccum(fb, toList(fa)) {
+        case (b, Nil) => ((None, b), Nil)
+        case (b, a :: as) => ((Some(a), b), as)
+      }._1
+
+    //exercise12.18
+    //アプリカティブファンクタの積を使って2つの走査を融合。2つの関数f,gが与えられた時、faを1回操作し、f,gの関数の結果を1回で集める
+    //答え見た。
+    def fuse[G[_], H[_], A, B](fa: F[A])(f: A => G[B], g: A => H[B])
+                              (G: Applicative[G], H: Applicative[H]): (G[F[B]], H[F[B]]) = {
+      traverse[({type f[x] = (G[x], H[x])})#f, A, B](fa)(a => (f(a), g(a)))(G.product(H))
+    }
+
+
+    //exercise12.19
+    //何も引数渡されてないじゃん・・・
+    //答え見たが、selfが動かない
+    def compose[G[_]](implicit G: Traverse[G]): Traverse[({type f[x] = F[G[x]]})#f] = {
+      val self = this
+      new Traverse[({type f[x] = F[G[x]]})#f] {
+        override def traverse[M[_] : Applicative, A, B](fa: F[G[A]])(f: A => G[B]): G[F[G[B]]] =
+          self.traverse(fa)((ga: G[A]) => G.traverse(ga)(f))
+      }
+    }
+
+    //exercise 12.20
+    //def composeM[F[_], G[_]](F: Monad[F], G: Monad[G], T: Traverse[G]): Monad[({type f[x] = F[G[x]]})#f] =
+    //  new Monad[({type f[x] = F[G[x]]})#f] {
+    //    override def unit[A](a: => A): F[G[A]] = F.unit(G.unit(a))
+
+    //    //ここわからん
+    //    override def flatMap[A, B](fga: F[G[A]])(f: A => F[G[B]]): F[G[B]] =
+    //      F.flatMap(fga)(ga => F.map(T.traverse(ga)(f))(G.join))
+    //  }
+
+    //答えと関数が違う・・・
+    def composeM[G[_],H[_]](implicit G: Monad[G], H: Monad[H], T: Traverse[H]): Monad[({type f[x] = G[H[x]]})#f] =
+      new Monad[({type f[x] = G[H[x]]})#f] {
+      def unit[A](a: => A): G[H[A]] = G.unit(H.unit(a))
+      override def flatMap[A,B](mna: G[H[A]])(f: A => G[H[B]]): G[H[B]] =
+        G.flatMap(mna)(na => G.map(T.traverse(na)(f))(H.join))
+    }
+
+    //表現力や威力と引き換えに合成性とモジュール性が犠牲になる
+    //モナドの合成は大抵合成用に構築されたカスタムモナドを使って解決する。それらはモナド変換子(monad transformer)と呼ばれる
+    //例えば、OptionTモナド変換子はOptionを他のモナドと合成する
+
+    //エラーになってる。。。。動くはずなのに
+    //case class OptionT[M[_], A](value: M[Option[A]])(implicit M: Monad[M]){
+    //  def flatMap[B](f: A => OptionT[M,B]): OptionT[M,B] =
+    //    OptionT(value flatMap {
+    //      case None => M.unit(None)
+    //      case Some(a) => f(a).value
+    //    })
+    //}
+
+  }
+
+
+  //MonoidからApplicativeへの変換
+  type Const[M, B] = M
+
+  implicit def monoidApplicative[M](M: Monoid[M]): Applicative[({
+    type f[x] = Const[M, x]
+  })#f] =
+    new Applicative[({
+      type f[x] = Const[M, x]
+    })#f] {
+      override def unit[A](a: => A): Const[M, A] = M.zero
+
+      override def map2[A, B, C](m1: M, m2: M)(f: (A, B) => C): M = M.op(m1, m2)
+
+    }
+
+  //TraverseをFoldableの拡張として定義できることと、traverseをベースとしてfoldMapのデフォルト実装を提供できることを意味する(わからん)
+
+  //trait Traverse2[F[_]] extends Functor[F] with Foldable[F] {
+  //  override def foldMap[A, M](as: F[A])(f: A => M)(mb: Monoid[M]): M =
+  //    traverse[(type f[x] = Const[M,x])#f, A, Nothing](as)(f)(monoidApplicative(mb))
+  //}
+
+  //TraverseがFoldableとFunctorの両方を拡張している
+  //重要なのはFoldable自体はFunctorを拡張できないこと
+  //foldをベースとしてmapを記述することは可能だが、普遍的に行うことは不可能
+
+  //exercise 12.15
+  //FoldableがFunctorを拡張できない理由を納得がいくまで検討せよ。ファンクタでないFoldableを思いつけるか？
+  //答え見たけどわからない
+  /*
+  * これは、 `foldRight`、` foldLeft`、および `foldMap`では、折りたたみ可能なタイプの値を構築する方法が提供されないためです。
+  * 構造に「マッピング」するには、新しい構造を作成する機能が必要です（「リスト」の場合は「Nil」と「Cons」など）。
+  * トラバーサルは元の構造を維持するため、「トラバース」は「Functor」を正確に拡張できます。
+    ファンクタではないFoldableの例：
+
+     case class Iteration [A]（a：A、f：A => A、n：Int）{
+       def foldMap [B]（g：A => B）（M：Monoid [B]）：B = {
+         def iterate（n：Int、b：B、c：A）：B =
+           if（n <= 0）b else iterate（n-1、g（c）、f（a））
+         iterate（n、M.zero、a）
+       }
+     }
+
+    このクラスは、いくつかのシード値から始まる関数の繰り返し適用によって生成された一連の「A」値を概念的に表します。
+    * しかし、このタイプの「マップ」を定義できない理由を理解できますか？
+  *
+  *
+  * */
+
+  //Applicativeインスタンスは常に合成されますが、Monadインスタンスはそうではない
 
 }
