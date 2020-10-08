@@ -468,6 +468,7 @@ object Chapter12 {
 
 
   trait Traverse[F[_]] extends Functor[F] {
+    self =>
     def traverse[G[_], A, B](fa: F[A])(f: A => G[B])(implicit G: Applicative[G]): G[F[B]] = sequence(map(fa)(f))
 
     def sequence[G[_], A](fga: F[G[A]])(implicit G: Applicative[G]): G[F[A]] = traverse(fga)(ga => ga)
@@ -554,14 +555,11 @@ object Chapter12 {
     //exercise12.19
     //何も引数渡されてないじゃん・・・
     //答え見たが、selfが動かない
-    def compose[G[_]](implicit G: Traverse[G]): Traverse[({type f[x] = F[G[x]]})#f] = {
-      val self = this
+    def compose[G[_]](implicit G: Traverse[G]): Traverse[({type f[x] = F[G[x]]})#f] =
       new Traverse[({type f[x] = F[G[x]]})#f] {
-        override def traverse[M[_] : Applicative, A, B](fa: F[G[A]])(f: A => G[B]): G[F[G[B]]] =
+        override def traverse[M[_]:Applicative,A,B](fa: F[G[A]])(f: A => M[B]) =
           self.traverse(fa)((ga: G[A]) => G.traverse(ga)(f))
       }
-    }
-
     //exercise 12.20
     //def composeM[F[_], G[_]](F: Monad[F], G: Monad[G], T: Traverse[G]): Monad[({type f[x] = F[G[x]]})#f] =
     //  new Monad[({type f[x] = F[G[x]]})#f] {
@@ -573,12 +571,13 @@ object Chapter12 {
     //  }
 
     //答えと関数が違う・・・
-    def composeM[G[_],H[_]](implicit G: Monad[G], H: Monad[H], T: Traverse[H]): Monad[({type f[x] = G[H[x]]})#f] =
+    def composeM[G[_], H[_]](implicit G: Monad[G], H: Monad[H], T: Traverse[H]): Monad[({type f[x] = G[H[x]]})#f] =
       new Monad[({type f[x] = G[H[x]]})#f] {
-      def unit[A](a: => A): G[H[A]] = G.unit(H.unit(a))
-      override def flatMap[A,B](mna: G[H[A]])(f: A => G[H[B]]): G[H[B]] =
-        G.flatMap(mna)(na => G.map(T.traverse(na)(f))(H.join))
-    }
+        def unit[A](a: => A): G[H[A]] = G.unit(H.unit(a))
+
+        override def flatMap[A, B](mna: G[H[A]])(f: A => G[H[B]]): G[H[B]] =
+          G.flatMap(mna)(na => G.map(T.traverse(na)(f))(H.join))
+      }
 
     //表現力や威力と引き換えに合成性とモジュール性が犠牲になる
     //モナドの合成は大抵合成用に構築されたカスタムモナドを使って解決する。それらはモナド変換子(monad transformer)と呼ばれる
