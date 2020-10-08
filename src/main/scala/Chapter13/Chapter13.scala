@@ -183,9 +183,13 @@ object Chapter13 {
 
     def map[B](f: A => B): IO4[B] = flatMap(f andThen (Return(_)))
 
+    //コルーチン(一旦処理を中断した後、続きから処理を再開するやつ)のような物らしい
+    //トランポリンともいう。制御を一つのループに戻すことでスタックを排除するテクニック全体をトランポリン化という。
+    //TODO: 再起処理にcase classのSuspendのようなものが挟まればトランポリン？
     def run[A](io: IO4[A]): A = io match {
       case Return(_) => _
       case Suspend(r) => r()
+      //run(f(run(x))にもできるが、そうした場合、runが末尾にこないためxにmatchを使っている TODO: よくわからないので質問する
       case FlatMap(x, f) => x match {
         case Return(a) => run(f(a)) //aがAny
         case Suspend(r) => run(f(r())) //r()がAny
@@ -206,8 +210,31 @@ object Chapter13 {
 
   def printLine4(s: String): IO4[Unit] = Suspend(() => println(s))
 
+  val f: Int => IO4[Int] = (x: Int) => Return(x)
+  val g = List.fill(10000)(f).foldLeft(f) {
+    (a, b) => x => Suspend(() => ()).flatMap { _ => a(x).flatMap(b) }
+  }
+
+  // TODO: runがない。。。runってIOの外に書くやつ？
+  //val x1 = run(g(0))
+
+  //エラーになる
+  //sealed trait TailRec[A] {
+  //  def flatMap[B](f: A => TailRec[B]): TailRec[B] =
+  //    FlatMap(this, f)
+
+  //  def map[B](f: A => B): TailRec[B] =
+  //    flatMap(f andThen (Return(_)))
+  //}
+
+  //case class Return[A](a: A) extends TailRec[A]
+
+  //case class Suspend[A](resume: () => A) extends TailRec[A]
+
+  //case class FlatMap[A, B](sub: TailRec[A], k: A => TailRec[B]) extends TailRec[B]
 
   def main(args: Array[String]): Unit = {
     //convertor3.run
+
   }
 }
