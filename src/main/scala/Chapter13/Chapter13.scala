@@ -1,6 +1,9 @@
 package Chapter13
 
 import Chapter11.Chapter11.Monad
+import Chapter11.Par.Par
+
+import scala.annotation.tailrec
 
 object Chapter13 {
 
@@ -172,66 +175,129 @@ object Chapter13 {
   //  }
   //)
 
-  sealed trait IO4[A] {
-    def unit[A](a: => A): IO4[A] = new IO4[A] {
-      def run = a
-    }
+  //sealed trait IO4[A] {
+  //  def unit[A](a: => A): IO4[A] = new IO4[A] {
+  //    def run = a
+  //  }
 
-    def apply[A](a: => A): IO4[A] = unit(a)
+  //  def apply[A](a: => A): IO4[A] = unit(a)
 
-    def flatMap[B](f: A => IO4[B]): IO4[B] = FlatMap(this, f)
+  //  def flatMap[B](f: A => IO4[B]): IO4[B] = FlatMap(this, f)
 
-    def map[B](f: A => B): IO4[B] = flatMap(f andThen (Return(_)))
+  //  def map[B](f: A => B): IO4[B] = flatMap(f andThen (Return(_)))
 
-    //コルーチン(一旦処理を中断した後、続きから処理を再開するやつ)のような物らしい
-    //トランポリンともいう。制御を一つのループに戻すことでスタックを排除するテクニック全体をトランポリン化という。
-    //TODO: 再起処理にcase classのSuspendのようなものが挟まればトランポリン？
-    def run[A](io: IO4[A]): A = io match {
-      case Return(_) => _
-      case Suspend(r) => r()
-      //run(f(run(x))にもできるが、そうした場合、runが末尾にこないためxにmatchを使っている TODO: よくわからないので質問する
-      case FlatMap(x, f) => x match {
-        case Return(a) => run(f(a)) //aがAny
-        case Suspend(r) => run(f(r())) //r()がAny
-        case FlatMap(y, g) => run(y flatMap (a => g(a) flatMap f)) //aとfがAny
-      }
+  //  //コルーチン(一旦処理を中断した後、続きから処理を再開するやつ)のような物らしい
+  //  //トランポリンともいう。制御を一つのループに戻すことでスタックを排除するテクニック全体をトランポリン化という。
+  //  //TODO: 再起処理にcase classのSuspendのようなものが挟まればトランポリン？
+  //  //@annotation.tailrec
+  //  //def run[A](io: IO4[A]): A = io match {
+  //  //  case Return(_) => _
+  //  //  case Suspend(r) => r()
+  //  //  //run(f(run(x))にもできるが、そうした場合、runが末尾にこないためxにmatchを使っている TODO: よくわからないので質問する
+  //  //  case FlatMap(x, f) => x match {
+  //  //    case Return(a) => run(f(a)) //aがAny
+  //  //    case Suspend(r) => run(f(r())) //r()がAny
+  //  //    case FlatMap(y, g) => run(y flatMap (a => g(a) flatMap f)) //aとfがAny
+  //  //  }
+  //  //}
+  //  ////余計なステップを実行せず直ちにAを返す。このコンストラクタを検出した時点でrunは計算が終了していることを認識する
+  //  //case class Return[A](a: A) extends IO4[A]
+
+  //  ////計算の中断。resumeは引数を受け取らない関数だが、なんらかの作用を持ち結果を返す
+  //  //case class Suspend[A](resume: () => A) extends IO4[A]
+
+  //  ////2つのステップの合成。flatMapを関数ではなく、データコンストラクタとして具体化する。これを検出した時点でrunは部分計算subを処理し、
+  //  //// subが結果を合成したところでkを継続する必要がある
+  //  //case class FlatMap[A, B](sub: IO4[A], k: A => IO4[B]) extends IO4[B]
+
+  //  //エラーになる
+  //  // メリット:スタックオーバーフローは発生しなくなる
+  //  // デメリット: どのような作用が発生するかわからない。実行スレッドをブロックせずにIOを実行するための並列化の手段がない
+  //  //sealed trait TailRec[A] {
+  //  //  def flatMap[B](f: A => TailRec[B]): TailRec[B] =
+  //  //    FlatMap(this, f)
+
+  //  //  def map[B](f: A => B): TailRec[B] =
+  //  //    flatMap(f andThen (Return(_)))
+  //  //}
+
+  //  //case class Return[A](a: A) extends TailRec[A]
+
+  //  //case class Suspend[A](resume: () => A) extends TailRec[A]
+
+  //  //case class FlatMap[A, B](sub: TailRec[A], k: A => TailRec[B]) extends TailRec[B]
+
+  //  //FlatMap(Suspend(s), k)を調べ、s()を呼び出し、runに制御を戻し、sを実行して結果を待ち、得られた値をkに渡す
+
+
+  //  //非同期処理をサポートするようになったので、任意のParを受け取るSuspendコンストラクタを使って、埋め込むことができる
+  //  //sealed trait Async[A] {
+  //  //  def flatMap[B](f: A => Async[B]): Async[B] =
+  //  //    FlatMap(this, f)
+
+  //  //  def map[B](f: A => B): Async[B] =
+  //  //    flatMap(f andThen (Return(_)))
+  //  //}
+
+  //  //case class Return[A](a: A) extends Async[A]
+
+  //  //case class Suspend[A](resume: Par[A]) extends Async[A]
+
+  //  //case class FlatMap[A, B](sub: Async[A], k: A => Async[B]) extends Async[B]
+
+  //  //def step[A](async: Async[A]): Async[A] = async match {
+  //  //  case FlatMap(FlatMap(x, f), g) => step(x flatMap (a => f(a) flatMap g))
+  //  //  case FlatMap(Return(x), f) => step(f(x))
+  //  //  case _ => async
+  //  //}
+
+  //  //def run[A](async: Async[A]): Par[A] = step(async) match {
+  //  //  case Return(a) => Par.unit(a)
+  //  //  case Suspend(r) => r
+  //  //  case FlatMap(x, f) => x match {
+  //  //    case Suspend(r) => Par.flatMap(r)(a => run(f(a)))
+  //  //    case _ => sys.error("Impossible; `step` eliminates these cases")
+  //  //  }
+  //  //}
+
+
+  //}
+
+  //ParすらFに置き換える
+  sealed trait Free[F[_], A] {
+    //exercise 13.1
+    def map[B](f: A => B): Free[F, B] = FlatMap(this, f andThen (Return(_)))
+
+    def flatMap[B](f: A => Free[F, B]): Free[F, B] = FlatMap(this, f)
+
+    def freeMonAd[F[_]]: Monad[({type f[A] = Free[F, A]})#f] = new Monad[({type f[A] = Free[F, A]})#f] {
+      override def unit[A](a: => A): Free[F, A] = Return(a)
+
+      //ここだけ答え見た
+      override def flatMap[A, B](ma: Free[F, A])(f: A => Free[F, B]): Free[F, B] = ma.flatMap(f)
     }
   }
 
-  //余計なステップを実行せず直ちにAを返す。このコンストラクタを検出した時点でrunは計算が終了していることを認識する
-  case class Return[A](a: A) extends IO4[A]
+  case class Return[F[_], A](a: A) extends Free[F, A]
 
-  //計算の中断。resumeは引数を受け取らない関数だが、なんらかの作用を持ち結果を返す
-  case class Suspend[A](resume: () => A) extends IO4[A]
+  case class Suspend[F[_], A](s: F[A]) extends Free[F, A]
 
-  //2つのステップの合成。flatMapを関数ではなく、データコンストラクタとして具体化する。これを検出した時点でrunは部分計算subを処理し、
-  // subが結果を合成したところでkを継続する必要がある
-  case class FlatMap[A, B](sub: IO4[A], k: A => IO4[B]) extends IO4[B]
+  case class FlatMap[F[_], A, B](s: Free[F, A], f: A => Free[F, B]) extends Free[F, B]
 
-  def printLine4(s: String): IO4[Unit] = Suspend(() => println(s))
+  type TailRec[A] = Free[Function0, A]
+  type Async[A] = Free[Par, A]
 
-  val f: Int => IO4[Int] = (x: Int) => Return(x)
-  val g = List.fill(10000)(f).foldLeft(f) {
-    (a, b) => x => Suspend(() => ()).flatMap { _ => a(x).flatMap(b) }
-  }
+
+  //def printLine4(s: String): IO4[Unit] = Suspend(() => println(s))
+
+  //val f: Int => IO4[Int] = (x: Int) => Return(x)
+  //val g = List.fill(10000)(f).foldLeft(f) {
+  //  (a, b) => x => Suspend(() => ()).flatMap { _ => a(x).flatMap(b) }
+  //}
 
   // TODO: runがない。。。runってIOの外に書くやつ？
   //val x1 = run(g(0))
 
-  //エラーになる
-  //sealed trait TailRec[A] {
-  //  def flatMap[B](f: A => TailRec[B]): TailRec[B] =
-  //    FlatMap(this, f)
-
-  //  def map[B](f: A => B): TailRec[B] =
-  //    flatMap(f andThen (Return(_)))
-  //}
-
-  //case class Return[A](a: A) extends TailRec[A]
-
-  //case class Suspend[A](resume: () => A) extends TailRec[A]
-
-  //case class FlatMap[A, B](sub: TailRec[A], k: A => TailRec[B]) extends TailRec[B]
 
   def main(args: Array[String]): Unit = {
     //convertor3.run
