@@ -1,6 +1,7 @@
 package Chapter13
 
 import Chapter11.Chapter11.Monad
+import Chapter11.Par
 import Chapter11.Par.Par
 
 import scala.annotation.tailrec
@@ -121,6 +122,7 @@ object Chapter13 {
 
     //IOぶろっくを生成可能になる
     def apply[A](a: => A): IO3[A] = unit(a)
+
   }
 
   def ReadLine: IO3[String] = IO3 {
@@ -270,11 +272,43 @@ object Chapter13 {
 
     def flatMap[B](f: A => Free[F, B]): Free[F, B] = FlatMap(this, f)
 
-    def freeMonAd[F[_]]: Monad[({type f[A] = Free[F, A]})#f] = new Monad[({type f[A] = Free[F, A]})#f] {
+    def freeMonad[F[_]]: Monad[({type f[A] = Free[F, A]})#f] = new Monad[({type f[A] = Free[F, A]})#f] {
       override def unit[A](a: => A): Free[F, A] = Return(a)
 
       //ここだけ答え見た
       override def flatMap[A, B](ma: Free[F, A])(f: A => Free[F, B]): Free[F, B] = ma.flatMap(f)
+    }
+
+    //exercise 13.2
+    //@annotation.tailrec
+    //def runTrampoline[A](a: Free[Function0, A]): A =
+    //  a match {
+    //    case Return(_) => _
+    //    case Suspend(s) => s()
+    //    case FlatMap(s, f) => s match {
+    //        //答え見た。同じのを思ったが、Anyになるので動かないと思った
+    //      case Return(a) => runTrampoline { f(a) }
+    //      case Suspend(r) => runTrampoline { f(r()) }
+    //      case FlatMap(a0,g) => runTrampoline { a0 flatMap { a0 => g(a0) flatMap f } }
+    //    }
+    //  }
+
+    //exercise 13.3
+    //stepがあっているかはわからない
+    def step[F[_], A](a: Free[F, A]): Free[F, A] = a match {
+      case FlatMap(FlatMap(s, f), g) => step(s flatMap (a => f(a) flatMap g))
+      case FlatMap(Return(a), f) => step(f(a))
+      case _ => a
+    }
+
+    //stepを書き忘れてた
+    def run[F[_], A](a: Free[F, A])(implicit F: Monad[F]): F[A] = step(a) match {
+      case Return(aa) => F.unit(aa)
+      case Suspend(r) => r
+      case FlatMap(x, f) => x match {
+        case Suspend(r) => F.flatMap(r)(aa => run(f(aa)))
+        case _ => sys.error("error")
+      }
     }
   }
 
@@ -297,6 +331,86 @@ object Chapter13 {
 
   // TODO: runがない。。。runってIOの外に書くやつ？
   //val x1 = run(g(0))
+
+  //Free[F,A]は型Aの値が0こ以上のFのレイヤに包含された再帰構造
+  //Function0[A]は値がどのようなものになるかを推論できない
+
+
+  sealed trait Console[A] {
+    def toPar: Par[A]
+
+    //FUnction0[A]として解釈
+    def toThunk: () => A
+  }
+
+  case object ReadLine extends Console[Option[String]] {
+    override def toPar: Par[Option[String]] = Par.lazyUnit(run)
+
+    override def toThunk: () => Option[String] = () => run
+
+    def run: Option[String] =
+      try Some(readLine())
+      catch {
+        case e: Exception => None
+      }
+  }
+
+  case class PrintLine(line: String) extends Console[Unit] {
+    override def toPar: Par[Unit] = Par.lazyUnit(println(line))
+
+    override def toThunk: () => Unit = () => println(line)
+  }
+
+  //ConsoleはReadLineかPrintLineのどちらかのみ返す
+  object Console {
+    type ConsoleIO[A] = Free[Console, A]
+
+    def readLn: ConsoleIO[Option[String]] = Suspend(ReadLine)
+
+    def printLn(line: String): ConsoleIO[Unit] = Suspend(PrintLine(line))
+
+  }
+
+  val f1: Free[Console, Option[String]] = for {
+    _ <- Console.printLn("I can only interact with the console.")
+    ln <- Console.readLn
+  } yield ln
+
+  //Console型をFunction0やParなどのモナドを形成する他の型に変換しなければならない
+  trait Translate[F[_], G[_]] {
+    def apply[A](f: F[A]): G[A]
+  }
+
+  type ~>[F[_], G[_]] = Translate[F, G]
+
+  val consoleToFunction0: Console ~> Function0 = new (Console ~> Function0) {
+    override def apply[A](f: Console[A]): () => A = f.toThunk
+  }
+
+  val consoleToPar: Console -> Par = new (Console ~> Par) {
+    override def apply[A](f: Console[A]): Par[A] = f.toPar
+  }
+
+  //runの実装を一般化
+  //F ~> G型の値を受け取り、F[F,A]プログラムの解釈時に変換を実行する
+  //これをすると、Free[Console,A]をFunciton0[A]またはPar[A]のどちらかに変換する便利な関数runConsoleFunction0とrunConsoleParを実装できるらしい
+  def runFree[F[_], G[_], A](free: Free[F, A])(t: F ~> G)(implicit G: Monad[G]): G[A] =
+    step(free) match {
+      case Return(a) => G.unit(a)
+      case Suspend(r) => t(r)
+      case FlatMap(Suspend(r), f) => G.flatMap(t(r))(a => runFree(f(a))(t))
+      case _ => sys.error("Impossible; `step` eliminates there cases")
+    }
+
+  implicit val function0Monad: Monad[Function0] = new Monad[Function0] {
+    override def unit[A](a: => A): () => A = () => a
+
+    override def flatMap[A, B](ma: () => A)(f: A => () => B): () => B = () => f(ma())()
+  }
+
+  def runConsoleFunciton0[A](a: Free[Console, A]): () => A = runFree[Console, Function0, A](a)(consoleToFunction0)
+
+  def runConsolePar[A](a: Free[Console, A]): Par[A] = runFree[Console, Par, A](a)(consoleToPar)
 
 
   def main(args: Array[String]): Unit = {
