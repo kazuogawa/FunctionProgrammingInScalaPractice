@@ -1,5 +1,9 @@
 package Chapter13
 
+import java.nio.ByteBuffer
+import java.nio.channels.AsynchronousFileChannel
+import java.util.concurrent.ExecutorService
+
 import Chapter11.Chapter11.Monad
 import Chapter11.Par
 import Chapter11.Par.Par
@@ -280,18 +284,24 @@ object Chapter13 {
     }
 
     //exercise 13.2
-    //@annotation.tailrec
-    //def runTrampoline[A](a: Free[Function0, A]): A =
-    //  a match {
-    //    case Return(_) => _
-    //    case Suspend(s) => s()
-    //    case FlatMap(s, f) => s match {
-    //        //答え見た。同じのを思ったが、Anyになるので動かないと思った
-    //      case Return(a) => runTrampoline { f(a) }
-    //      case Suspend(r) => runTrampoline { f(r()) }
-    //      case FlatMap(a0,g) => runTrampoline { a0 flatMap { a0 => g(a0) flatMap f } }
-    //    }
-    //  }
+    @annotation.tailrec
+    def runTrampoline[A](a: Free[Function0, A]): A =
+      a match {
+        case Return(_) => _
+        case Suspend(s) => s()
+        case FlatMap(s, f) => s match {
+          //答え見た。同じのを思ったが、Anyになるので動かないと思った
+          case Return(a) => runTrampoline {
+            f(a)
+          }
+          case Suspend(r) => runTrampoline {
+            f(r())
+          }
+          case FlatMap(a0, g) => runTrampoline {
+            a0 flatMap { a0 => g(a0) flatMap f }
+          }
+        }
+      }
 
     //exercise 13.3
     //stepがあっているかはわからない
@@ -310,6 +320,34 @@ object Chapter13 {
         case _ => sys.error("error")
       }
     }
+
+    //exercise 13.4
+    //flatMapにはrunがflaMapの実装で自身を呼び出す問題がああるため、Function0に大してスタックセーフではない。したがってrunConsoleFunction0もスタックセーフではない。
+    //runFreeを使ってtranslateを実装し、それを使ってrunConsoleをスタックセーフな方法で実装
+    //答え見た
+    //まったくわからない。これだとなんでスタックセーフなの？
+    def translate[F[_], G[_], A](f: Free[F, A])(fg: F ~> G): Free[G, A] = {
+      type FreeG[A] = Free[G, A]
+      val t = new (F ~> FreeG) {
+        override def apply[A](a: F[A]): FreeG[A] = Suspend {
+          fg(a)
+        }
+      }
+      runFree(f)(t)(freeMonad[G])
+    }
+
+    def runConsole[A](a: Free[Console, A]): A =
+      runTrampoline {
+        translate(a)(new (Console ~> Function0) {
+          override def apply[A](c: Console[A]): () => A = c.toThunk
+        })
+      }
+
+    //Free[F, A]の型の値はFが提供する命令セットで記述されたプログラムのようなもの。
+    //再起の足場となるSuspendとモナディックな変数置換であるFlatMap,ReturnはFreeが持ってる。
+    //異なるIO機能ごとにFの他の選択肢を導入可能
+    //ファイルシステムFではファイルシステムでの読み書きアクセス、または読み取りアクセスのみ。
+    //ネットワークFではネットワーク接続を開いて読み取りを開始する等
   }
 
   case class Return[F[_], A](a: A) extends Free[F, A]
@@ -341,7 +379,12 @@ object Chapter13 {
 
     //FUnction0[A]として解釈
     def toThunk: () => A
+
+    def toReader: ConsoleReader[A]
+
+    def toState: ConsoleState[A]
   }
+
 
   case object ReadLine extends Console[Option[String]] {
     override def toPar: Par[Option[String]] = Par.lazyUnit(run)
@@ -369,6 +412,10 @@ object Chapter13 {
 
     def printLn(line: String): ConsoleIO[Unit] = Suspend(PrintLine(line))
 
+    def runConsoleReader[A](io: ConsoleIO[A]): ConsoleReader[A] =
+      runFree[Console, ConsoleReader, A](io)(consoleToReader)
+
+    def runConsoleState[A](io: ConsoleIO[A]): ConsoleState[A] = runFree[Console, ConsoleState, A](io)(consoleToState)
   }
 
   val f1: Free[Console, Option[String]] = for {
@@ -387,7 +434,7 @@ object Chapter13 {
     override def apply[A](f: Console[A]): () => A = f.toThunk
   }
 
-  val consoleToPar: Console -> Par = new (Console ~> Par) {
+  val consoleToPar: Console ~> Par = new (Console ~> Par) {
     override def apply[A](f: Console[A]): Par[A] = f.toPar
   }
 
@@ -408,13 +455,104 @@ object Chapter13 {
     override def flatMap[A, B](ma: () => A)(f: A => () => B): () => B = () => f(ma())()
   }
 
-  def runConsoleFunciton0[A](a: Free[Console, A]): () => A = runFree[Console, Function0, A](a)(consoleToFunction0)
+  def runConsoleFunction0[A](a: Free[Console, A]): () => A = runFree[Console, Function0, A](a)(consoleToFunction0)
 
   def runConsolePar[A](a: Free[Console, A]): Par[A] = runFree[Console, Par, A](a)(consoleToPar)
 
+  implicit val parMonad: Monad[Par] = new Monad[Par] {
+    def unit[A](a: => A) = Par.unit(a)
+
+    def flatMap[A, B](a: Par[A])(f: A => Par[B]) = Par.fork {
+      Par.flatMap(a)(f)
+    }
+  }
+
+
+  //PrintLineリクエストを無視して、ReadLineリクエストへの応答として常に定数文字列を返すだけのテスト用のインタプリタ
+  case class ConsoleReader[A](run: String => A) {
+    def map[B](f: A => B): ConsoleReader[B] =
+      ConsoleReader(r => f(run(r)))
+
+
+    def flatMap[B](f: A => ConsoleReader[B]): ConsoleReader[B] =
+      ConsoleReader(r => f(run(r)).run(r))
+  }
+
+  object ConsoleReader {
+    implicit val monad: Monad[ConsoleReader] = new Monad[ConsoleReader] {
+      override def unit[A](a: => A): ConsoleReader[A] =
+        ConsoleReader(_ => a)
+
+      override def flatMap[A, B](ma: ConsoleReader[A])(f: A => ConsoleReader[B]): ConsoleReader[B] =
+        ma flatMap f
+    }
+  }
+
+  val consoleToReader: Console ~> ConsoleReader = new (Console ~> ConsoleReader) {
+    override def apply[A](a: Console[A]): ConsoleReader[A] = a.toReader
+  }
+
+  //inはRadLineリクエスト処理に使用され、outはPrintLineリクエストに含まれた文字列を受け取る
+  case class Buffers(in: List[String], out: Vector[String])
+
+  case class ConsoleState[A](run: Buffers => (A, Buffers))
+
+  object ConsoleState {
+    implicit val monad: Monad[ConsoleState] = new Monad[ConsoleState] {
+      override def unit[A](a: => A): ConsoleState[A] = ???
+
+      override def flatMap[A, B](ma: ConsoleState[A])(f: A => ConsoleState[B]): ConsoleState[B] = ???
+    }
+  }
+
+  val consoleToState: Console ~> ConsoleState = new (Console ~> ConsoleState) {
+    override def apply[A](a: Console[A]): ConsoleState[A] = a.toState
+  }
+
+  //Free型では如何なる種類の副作用も要求されない
+
+  trait Source {
+    //結果が利用可能になった時点orサブシステムでエラーが発生した場合にどうするかを指定するコールバック関数が指定される
+    def readBytes(numBytes: Int, callback: Either[Throwable, Array[Byte]] => Unit): Unit
+  }
+
+  trait Future[+A] {
+    private[parallelism] def apply(k: A => Unit): Unit
+  }
+
+  type Par[+A] = ExecutorService => Future[A]
+
+  def async[A](f: (A => Unit) => Unit): Par[A] = es => new Future[A] {
+    override def apply(k: A => Unit): Unit = f(k)
+  }
+
+  def nonblockingRead(source: Source, numBytes: Int): Par[Either[Throwable, Array[Byte]]] =
+    async {
+      (cb: Either[Throwable, Array[Byte]] => Unit) =>
+        source.readBytes(numBytes, cb)
+    }
+
+  def readPar(source: Source, numBytes: Int): Free[Par, Either[Throwable, Array[Byte]]] =
+    Suspend(nonblockingRead(source, numBytes))
+
+  //exercise13.5
+  //答え見た。なにもわからない
+  def read(file: AsynchronousFileChannel, fromPosition: Long, numBytes: Int): Par[Either[Throwable, Array[Byte]]] =
+    Par.async { (cb: Either[Throwable, Array[Byte]] => Unit) =>
+      val buf = ByteBuffer.allocate(numBytes)
+      file.read(buf, fromPosition, (), new CompletionHandler[Integer, Unit] {
+        def completed(bytesRead: Integer, ignore: Unit) = {
+          val arr = new Array[Byte](bytesRead)
+          buf.slice.get(arr, 0, bytesRead)
+          cb(Right(arr))
+        }
+
+        def failed(err: Throwable, ignore: Unit) =
+          cb(Left(err))
+      })
+    }
 
   def main(args: Array[String]): Unit = {
     //convertor3.run
-
   }
 }
