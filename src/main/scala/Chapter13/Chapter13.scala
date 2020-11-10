@@ -1,7 +1,7 @@
 package Chapter13
 
 import java.nio.ByteBuffer
-import java.nio.channels.AsynchronousFileChannel
+import java.nio.channels.{AsynchronousFileChannel, CompletionHandler}
 import java.util.concurrent.ExecutorService
 
 import Chapter11.Chapter11.Monad
@@ -541,18 +541,135 @@ object Chapter13 {
     Par.async { (cb: Either[Throwable, Array[Byte]] => Unit) =>
       val buf = ByteBuffer.allocate(numBytes)
       file.read(buf, fromPosition, (), new CompletionHandler[Integer, Unit] {
-        def completed(bytesRead: Integer, ignore: Unit) = {
+        def completed(bytesRead: Integer, ignore: Unit): Unit = {
           val arr = new Array[Byte](bytesRead)
           buf.slice.get(arr, 0, bytesRead)
           cb(Right(arr))
         }
 
-        def failed(err: Throwable, ignore: Unit) =
+        def failed(err: Throwable, ignore: Unit): Unit =
           cb(Left(err))
       })
     }
 
+  //listをミュータブルな配列に変換し、quick sort アルゴリズムで配列を直接ソートし、その配列をリストに戻す
+  def quicksort(xs: List[Int]): List[Int] = if (xs.isEmpty) xs else {
+    val arr = xs.toArray
+
+    def swap(x: Int, y: Int): Unit = {
+      val tmp = arr(x)
+      arr(x) = arr(y)
+      arr(y) = tmp
+    }
+
+    //配列の一部をpivotよりも大きい要素と小さい要素に分割
+    def partition(n: Int, r: Int, pivot: Int): Int = {
+      val pivotVal = arr(pivot)
+      swap(pivot, r)
+      var j = n
+      for (i <- n until r) if (arr(i) < pivotVal) {
+        swap(i, j)
+        j += i
+      }
+      swap(j, r)
+      j
+    }
+
+    //配列の一部を直接ソート
+    def qs(n: Int, r: Int): Unit = if (n < r) {
+      val pi = partition(n, r, n + (r - n) / 2)
+      qs(n, pi - 1)
+      qs(pi + 1, r)
+    }
+
+    qs(0, arr.length - 1)
+    arr.toList
+
+  }
+
+  sealed trait ST[S, A] {
+    self =>
+    //runをprotectedで宣言しているのはSが状態変化させる能力を表していて、その変化を外部に漏らしたくないため
+    protected def run(s: S): (A, S)
+
+    def map[B](f: A => B): ST[S, B] = new ST[S, B] {
+      override protected def run(s: S): (B, S) = {
+        val (a, s1) = self.run(s)
+        (f(a), s1)
+      }
+    }
+
+    def flatMap[B](f: A => ST[S, B]): ST[S, B] = new ST[S, B] {
+      def run(s: S): (B, S) = {
+        val (a, s1) = self.run(s)
+        f(a).run(s1)
+      }
+    }
+  }
+
+  object ST {
+    def apply[S, A](a: => A): ST[S, A] = {
+      lazy val memo = a
+      new ST[S, A] {
+        def run(s: S): (A, S) = (memo, s)
+      }
+    }
+    def runST[A](st: RunnableST[A]): A =
+      st.apply[Unit].run(())._1
+  }
+
+  sealed trait STRef[S, A] {
+    protected var cell: A
+
+    //STにA型入れてapplyが動いてST[S,A]が返される
+    def read: ST[S, A] = ST(cell)
+
+    def write(a: A): ST[S, Unit] = new ST[S, Unit] {
+      def run(s: S): (Unit, S) = {
+        cell = a
+        ((), s)
+      }
+    }
+  }
+
+  object STRef {
+    def apply[S, A](a: A): ST[S, STRef[S, A]] = ST(new STRef[S, A] {
+      var cell: A = a
+    })
+  }
+
+  //Sに関して多相であるため、渡された値を使用しないことが保証される
+  trait RunnableST[A] {
+    def apply[S]: ST[S, A]
+  }
+
   def main(args: Array[String]): Unit = {
     //convertor3.run
+    //Int型のミュータブルなセルを2つ割り当て、それらの内容を入れ替えて両方に1を足し、新しい値を読み取る
+    //runはprotectedなので実行はできない
+    for {
+      r1 <- STRef[Nothing, Int](1)
+      r2 <- STRef[Nothing, Int](1)
+      x <- r1.read
+      y <- r2.read
+      _ <- r1.write(y + 1)
+      _ <- r2.write(x + 1)
+      a <- r1.read
+      b <- r2.read
+    } yield (a, b)
+
+    val p = new RunnableST[(Int, Int)] {
+      override def apply[S]: ST[S, (Int, Int)] = for {
+        r1 <- STRef(1)
+        r2 <- STRef(2)
+        x <- r1.read
+        y <- r2.read
+        _ <- r1.write(y + 1)
+        _ <- r2.write(x + 1)
+        a <- r1.read
+        b <- r2.read
+      } yield (a, b)
+    }
+    val r = ST.runST(p)
   }
 }
